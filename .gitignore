@@ -1,0 +1,17 @@
+# Local / OS
+.DS_Store
+__pycache__/
+*.pyc
+
+# Secrets — never commit real keys
+.env
+
+# Runtime
+*.log
+.pids
+
+# Raw OSM responses (large, reproducible via tools/fetch_osm.py)
+data/osm/
+
+# Demo result cache (regenerate with tools/precompute.py)
+data/cache/

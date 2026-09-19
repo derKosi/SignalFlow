@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" font-family="-apple-system, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="arw" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#64748b"/>
+    </marker>
+    <marker id="arwA" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#f59e0b"/>
+    </marker>
+    <marker id="arwG" markerWidth="10" markerHeight="10" refX="8" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#22c55e"/>
+    </marker>
+  </defs>
+
+  <rect x="0" y="0" width="1280" height="720" fill="#0b1220"/>
+
+  <!-- Header -->
+  <text x="40" y="52" fill="#e2e8f0" font-size="30" font-weight="700">SignalFlow</text>
+  <text x="40" y="80" fill="#94a3b8" font-size="16">Architektur &amp; Regelkreis — adaptive Ampelsteuerung (MunichTech EXPO 2026)</text>
+  <line x1="40" y1="98" x2="1240" y2="98" stroke="#1e293b" stroke-width="1.5"/>
+
+  <!-- A: demand -->
+  <rect x="40" y="150" width="210" height="90" rx="10" fill="#131c2b" stroke="#243244"/>
+  <text x="60" y="182" fill="#e2e8f0" font-size="15" font-weight="600">Nachfrage-Szenario</text>
+  <text x="60" y="205" fill="#94a3b8" font-size="12">4 Zufahrten N/O/S/W</text>
+  <text x="60" y="222" fill="#94a3b8" font-size="12">je L / T / R, Peak-Rampe</text>
+
+  <!-- B: arrivals -->
+  <rect x="300" y="150" width="230" height="90" rx="10" fill="#131c2b" stroke="#243244"/>
+  <text x="320" y="182" fill="#e2e8f0" font-size="15" font-weight="600">Arrival-Stream</text>
+  <text x="320" y="205" fill="#94a3b8" font-size="12">Poisson, 12 Bewegungen</text>
+  <text x="320" y="222" fill="#94a3b8" font-size="12">deterministisch (Seed)</text>
+
+  <!-- C1 fixed -->
+  <rect x="600" y="95" width="260" height="82" rx="10" fill="#131c2b" stroke="#243244"/>
+  <text x="620" y="126" fill="#e2e8f0" font-size="15" font-weight="600">Fixed-Time Controller</text>
+  <text x="620" y="149" fill="#94a3b8" font-size="12">Baseline: fester Umlauf</text>
+  <text x="620" y="166" fill="#94a3b8" font-size="12">keine Reaktion auf Verkehr</text>
+
+  <!-- C2 adaptive (highlight) -->
+  <rect x="600" y="205" width="300" height="118" rx="10" fill="#0f2233" stroke="#38bdf8" stroke-width="1.6"/>
+  <text x="620" y="234" fill="#7dd3fc" font-size="15" font-weight="700">MaxPressure Controller (adaptiv)</text>
+  <text x="620" y="258" fill="#cbd5e1" font-size="12">Druck = Queue / Lane + Hunger-Bonus</text>
+  <text x="620" y="276" fill="#cbd5e1" font-size="12">Hysterese ×3.0 → kein Grün-Churn</text>
+  <text x="620" y="294" fill="#cbd5e1" font-size="12">min/max Grün 24–50 s, Gelb 3 s, All-Red 1 s</text>
+  <text x="620" y="312" fill="#cbd5e1" font-size="12">leere Phase → vorzeitig beenden</text>
+
+  <!-- D: model + metrics -->
+  <rect x="930" y="130" width="300" height="120" rx="10" fill="#131c2b" stroke="#243244"/>
+  <text x="950" y="161" fill="#e2e8f0" font-size="15" font-weight="600">Queueing-Modell</text>
+  <text x="950" y="184" fill="#94a3b8" font-size="12">dt = 1 s, Sättigungsfluss</text>
+  <text x="950" y="201" fill="#94a3b8" font-size="12">1800 veh/h/Lane → Service</text>
+  <text x="950" y="224" fill="#94a3b8" font-size="12">Metriken: Delay, Durchsatz,</text>
+  <text x="950" y="241" fill="#94a3b8" font-size="12">Grünverlust, CO₂-Proxy</text>
+
+  <!-- E: payload -->
+  <rect x="930" y="380" width="300" height="90" rx="10" fill="#131c2b" stroke="#243244"/>
+  <text x="950" y="412" fill="#e2e8f0" font-size="15" font-weight="600">Payload (JSON)</text>
+  <text x="950" y="435" fill="#94a3b8" font-size="12">Frames · KPIs · Decision-Log</text>
+  <text x="950" y="452" fill="#94a3b8" font-size="12">POST /api/simulate</text>
+
+  <!-- F: dashboard -->
+  <rect x="600" y="380" width="290" height="100" rx="10" fill="#131c2b" stroke="#243244"/>
+  <text x="620" y="412" fill="#e2e8f0" font-size="15" font-weight="600">Dashboard (Canvas)</text>
+  <text x="620" y="435" fill="#94a3b8" font-size="12">Kreuzung-Replay · Vorher/Nachher</text>
+  <text x="620" y="452" fill="#94a3b8" font-size="12">Verzögerungs-Zeitreihe · Entscheidungen</text>
+
+  <!-- G: ask -->
+  <rect x="300" y="380" width="240" height="120" rx="10" fill="#0f2233" stroke="#38bdf8" stroke-width="1.4"/>
+  <text x="320" y="412" fill="#7dd3fc" font-size="15" font-weight="700">„Frag SignalFlow"</text>
+  <text x="320" y="435" fill="#cbd5e1" font-size="12">natürlichsprachige Erklärung</text>
+  <text x="320" y="458" fill="#cbd5e1" font-size="12">POST /api/explain</text>
+  <text x="320" y="481" fill="#cbd5e1" font-size="12">POST /api/tts (Sprache)</text>
+
+  <!-- H1 Featherless -->
+  <rect x="40" y="380" width="210" height="70" rx="10" fill="#131c2b" stroke="#22c55e" stroke-width="1.3"/>
+  <text x="60" y="410" fill="#86efac" font-size="14" font-weight="700">Featherless.ai</text>
+  <text x="60" y="432" fill="#94a3b8" font-size="12">Open-Model-LLM → Erklärung</text>
+
+  <!-- H2 ElevenLabs -->
+  <rect x="40" y="462" width="210" height="70" rx="10" fill="#131c2b" stroke="#22c55e" stroke-width="1.3"/>
+  <text x="60" y="492" fill="#86efac" font-size="14" font-weight="700">ElevenLabs</text>
+  <text x="60" y="514" fill="#94a3b8" font-size="12">TTS → Sprachausgabe</text>
+
+  <!-- arrows -->
+  <line x1="250" y1="195" x2="296" y2="195" stroke="#64748b" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="530" y1="175" x2="596" y2="140" stroke="#64748b" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="530" y1="215" x2="596" y2="250" stroke="#38bdf8" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="860" y1="136" x2="926" y2="176" stroke="#64748b" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="900" y1="262" x2="945" y2="238" stroke="#38bdf8" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="1080" y1="250" x2="1080" y2="376" stroke="#64748b" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="930" y1="425" x2="894" y2="425" stroke="#64748b" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="600" y1="430" x2="544" y2="440" stroke="#64748b" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="300" y1="430" x2="254" y2="418" stroke="#38bdf8" stroke-width="2" marker-end="url(#arw)"/>
+  <line x1="300" y1="470" x2="254" y2="494" stroke="#22c55e" stroke-width="2" marker-end="url(#arwG)"/>
+
+  <!-- feedback loop -->
+  <path d="M980,252 C980,330 760,332 752,326" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="6 5" marker-end="url(#arwA)"/>
+  <text x="790" y="356" fill="#fbbf24" font-size="12">Regelkreis: Queues (live) → Druck → Phasenentscheidung</text>
+
+  <!-- district / network mode -->
+  <rect x="300" y="520" width="430" height="64" rx="10" fill="#0f2233" stroke="#38bdf8" stroke-width="1.4"/>
+  <text x="320" y="546" fill="#7dd3fc" font-size="14" font-weight="700">Distrikt-Modus · network.html</text>
+  <text x="320" y="568" fill="#cbd5e1" font-size="12">Echtes OpenStreetMap-Netz, 2 Regionen (Riem / Altstadtring), hunderte Kreuzungen parallel</text>
+  <line x1="420" y1="502" x2="420" y2="516" stroke="#38bdf8" stroke-width="2" marker-end="url(#arw)"/>
+
+  <!-- footer -->
+  <line x1="40" y1="600" x2="1240" y2="600" stroke="#1e293b" stroke-width="1"/>
+  <text x="40" y="630" fill="#64748b" font-size="12">Ohne API-Keys: Offline-Fallback — regelbasierte Erklärung, keine Sprachausgabe. Ein Befehl: python3 server.py · 48/48 Tests grün.</text>
+  <text x="40" y="652" fill="#64748b" font-size="12">Referenz (30 min Peak, identischer Verkehr): Ø-Delay 53,9 s → 40,7 s (−24,5 %), Leerlauf-Grün −68,4 %.</text>
+  <text x="40" y="690" fill="#334155" font-size="11">SignalFlow v0.1 · Python-Stdlib + Vanilla-JS · deterministische Seeds</text>
+</svg>

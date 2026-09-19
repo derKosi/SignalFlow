@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SignalFlow · Netzwerksimulation</title>
+<!-- No external assets: everything is local (.css / .js), works fully offline. -->
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="network.css" />
+</head>
+<body>
+
+<!-- Thin top loading indicator (shown while a simulation is running) -->
+<div id="loading-bar" class="loading-bar hidden" aria-hidden="true"></div>
+
+<!-- ============================ HEADER ============================ -->
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="30" height="30">
+        <rect x="11" y="3" width="10" height="26" rx="4" fill="#0e1620" stroke="#243244" stroke-width="1.5"/>
+        <circle cx="16" cy="9"  r="2.6" fill="#ef4444"/>
+        <circle cx="16" cy="16" r="2.6" fill="#f59e0b"/>
+        <circle cx="16" cy="23" r="2.6" fill="#22c55e"/>
+      </svg>
+    </span>
+    <div class="brand-text">
+      <h1>SignalFlow · Netzwerksimulation</h1>
+      <p class="sub">Distrikt-Simulation auf OpenStreetMap-Netz — Fixed-Time vs. adaptiv</p>
+    </div>
+  </div>
+
+  <div class="nav">
+    <a class="btn ghost" href="index.html">← Einzelkreuzung</a>
+    <a class="btn ghost" href="writeup.html">Writeup</a>
+  </div>
+</header>
+
+<main id="main">
+
+  <!-- Fehler / Offline-Hinweise -->
+  <div id="net-error" class="notice error hidden" role="alert"></div>
+
+  <!-- ======================= GEBIET + STEUERLEISTE ======================= -->
+  <section class="panel" aria-label="Simulationsparameter">
+    <div class="region-row">
+      <div class="control region-control">
+        <label for="ctl-region">Gebiet</label>
+        <select id="ctl-region" aria-label="Region"></select>
+      </div>
+      <div class="control add-region">
+        <label for="add-place">Ort hinzufügen (OpenStreetMap)</label>
+        <div class="add-row">
+          <input id="add-place" type="text" placeholder="z. B. Tübingen Zentrum" />
+          <button id="btn-add-region" class="btn ghost" type="button">Hinzufügen</button>
+        </div>
+        <span id="add-status" class="run-hint"></span>
+      </div>
+      <div class="net-stats" id="net-stats" aria-live="polite"></div>
+    </div>
+
+    <div class="net-controls">
+      <div class="control">
+        <label for="ctl-duration">Dauer (min)</label>
+        <input id="ctl-duration" type="range" min="5" max="60" step="1" value="15" />
+        <output id="val-duration" for="ctl-duration">15</output>
+      </div>
+
+      <div class="control">
+        <label for="ctl-load">Last (×)</label>
+        <input id="ctl-load" type="range" min="0.5" max="1.4" step="0.05" value="1.0" />
+        <output id="val-load" for="ctl-load">1.00</output>
+      </div>
+
+      <div class="control">
+        <label for="ctl-scenario">Szenario</label>
+        <select id="ctl-scenario">
+          <option value="normal">Normal</option>
+          <option value="berufsverkehr">Berufsverkehr</option>
+          <option value="ferien">Ferien</option>
+          <option value="freizeit">Freizeit/WE</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label for="ctl-mix">Fahrzeugmix</label>
+        <select id="ctl-mix">
+          <option value="car">nur Pkw</option>
+          <option value="city">Stadt (Pkw/Van/Lkw/Bus)</option>
+          <option value="truck">Lkw-lastig</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label for="ctl-tsp" title="Bus-Korridor-Priorität">Bus-Priorität</label>
+        <select id="ctl-tsp">
+          <option value="off">aus</option>
+          <option value="on">an (TSP)</option>
+        </select>
+      </div>
+
+      <div class="control">
+        <label for="ctl-seed">Seed</label>
+        <input id="ctl-seed" type="range" min="1" max="999" step="1" value="42" />
+        <output id="val-seed" for="ctl-seed">42</output>
+      </div>
+
+      <div class="control">
+        <label for="ctl-vph">Verkehr (veh/h)</label>
+        <input id="ctl-vph" type="range" min="2000" max="12000" step="250" value="6500" />
+        <output id="val-vph" for="ctl-vph">6500</output>
+      </div>
+    </div>
+
+    <div class="run-row">
+      <button id="btn-run" class="btn primary" type="button"><span class="btn-label">Simulieren</span></button>
+      <span id="run-hint" class="run-hint hidden"></span>
+    </div>
+  </section>
+
+  <!-- ========================== KPIs ========================== -->
+  <section class="kpi-grid" id="kpi-grid" aria-label="Kennzahlen">
+    <!-- KPI-Karten werden von network.js erzeugt (IDs bleiben synchron) -->
+  </section>
+
+  <!-- ====================== CANVAS-KARTE ====================== -->
+  <section class="panel viewer" aria-label="Netzwerkkarte – Animation">
+    <div class="viewer-bar">
+      <div class="transport">
+        <button id="btn-play" class="btn icon" type="button" title="Play/Pause">▶</button>
+        <div class="speeds" role="group" aria-label="Geschwindigkeit">
+          <button class="speed-btn" data-speed="0.5" type="button">0.5×</button>
+          <button class="speed-btn active" data-speed="1" type="button">1×</button>
+          <button class="speed-btn" data-speed="2" type="button">2×</button>
+          <button class="speed-btn" data-speed="4" type="button">4×</button>
+        </div>
+      </div>
+
+      <div class="modes" role="group" aria-label="Controller-Ansicht">
+        <button class="mode-btn" data-mode="fixed" type="button">Fixed</button>
+        <button class="mode-btn" data-mode="adaptive" type="button">Adaptive</button>
+        <button class="mode-btn active" data-mode="both" type="button">Beide</button>
+      </div>
+
+      <div class="readouts">
+        <span class="pill"><span class="k">Netzlast</span> <b id="playhead-q" class="mono">–</b></span>
+        <span class="pill mono"><span class="k">t</span> <b id="playhead-t">00:00</b></span>
+      </div>
+    </div>
+
+    <div class="canvas-wrap" id="canvas-wrap">
+      <div class="canvas-cell" id="cell-main">
+        <div class="canvas-title" id="cell-main-title">Adaptive</div>
+        <canvas id="canvas-main"></canvas>
+      </div>
+      <div class="canvas-cell" id="cell-alt">
+        <div class="canvas-title" id="cell-alt-title">Fixed</div>
+        <canvas id="canvas-alt"></canvas>
+      </div>
+    </div>
+
+    <div class="scrubber">
+      <input id="progress" type="range" min="0" max="100" step="0.1" value="0" aria-label="Fortschritt" />
+    </div>
+
+    <div class="legend" aria-hidden="true">
+      <span><i class="sw" style="background:#22c55e"></i>freie Fahrt (0 veh)</span>
+      <span><i class="sw" style="background:#eab308"></i>Stau im Aufbau</span>
+      <span><i class="sw" style="background:#ef4444"></i>Stau (≥ 12 veh/Link)</span>
+      <span><i class="sw" style="background:#2dd4bf"></i>signalisierter Knoten</span>
+      <span><i class="sw" style="background:#38475a"></i>Knoten</span>
+      <span><i class="sw" style="background:#64748b"></i>Fixed-Time</span>
+      <span><i class="sw" style="background:#2dd4bf"></i>Adaptiv</span>
+    </div>
+  </section>
+
+  <!-- ========================= CHARTS ========================= -->
+  <section class="net-charts">
+    <div class="panel chart-panel">
+      <h2>Vorher / Nachher</h2>
+      <p class="panel-sub">Verbesserung durch adaptive Steuerung (Δ % gegenüber Fixed-Time, positiv = besser)</p>
+      <canvas id="chart-bars"></canvas>
+    </div>
+    <div class="panel chart-panel">
+      <h2>Netzlast über die Zeit</h2>
+      <p class="panel-sub">Summe der Warteschlangen je Frame (veh) — Fixed vs. Adaptive</p>
+      <canvas id="chart-load"></canvas>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <span id="meta-info">Bereit.</span>
+    <span class="foot-note">Datenquelle: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende (ODbL) · Modell: Link-Queue-Näherung (mesoskopisch, dt = 1 s) · deterministisch über Seed</span>
+  </footer>
+</main>
+
+<script src="network.js"></script>
+</body>
+</html>

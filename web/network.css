@@ -1,0 +1,61 @@
+/* ============================================================================
+   SignalFlow – Netzwerksimulation: ergänzendes Layout.
+   Baut auf styles.css auf (dunkles Control-Room-Theme, Panels, Buttons,
+   Viewer, KPI- und Chart-Klassen werden wiederverwendet).
+   Keine externen Assets.
+   =========================================================================*/
+
+/* ------------------------------- Topbar -------------------------------- */
+.topbar .nav{ display:flex; align-items:center; gap:10px; }
+.topbar .nav a.btn{ text-decoration:none; }
+
+/* --------------------------- Gebiet + Stats ---------------------------- */
+.add-row{ display:flex; gap:8px; align-items:center; }
+.add-row input{ flex:1 1 160px; min-width:120px; padding:6px 9px; border-radius:8px;
+  border:1px solid #243244; background:#0d1626; color:var(--ink,#e2e8f0); font-size:13px; }
+.add-region .run-hint{ display:block; margin-top:6px; }
+.run-hint{ font-size:12.5px; color:#f5c451; margin-left:10px; align-self:center; }
+.btn.dirty{ box-shadow:0 0 0 2px rgba(245,196,81,.55); }
+.kpi .row.coordinated b{ color:#f5c451; }
+.kpi .delta.coordinated{ color:#f5c451; border-color:rgba(245,196,81,.35); background:rgba(245,196,81,.08); margin-left:6px; }
+.kpi .row.tuned-est b{ color:#7fd1a8; }
+.kpi .tag[title]{ cursor:help; }
+.region-row{
+  display:flex; flex-wrap:wrap; gap:16px 20px; align-items:flex-end;
+  margin-bottom:16px;
+}
+.region-control{ flex:1 1 320px; min-width:240px; }
+
+.net-stats{ display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; flex:2 1 360px; }
+.stat{
+  display:inline-flex; align-items:baseline; gap:7px;
+  background:var(--panel-2); border:1px solid var(--line); border-radius:999px;
+  padding:6px 12px; font-size:12.5px; color:var(--muted); white-space:nowrap;
+}
+.stat b{ font-family:var(--mono); color:var(--txt); font-size:13px; font-weight:600; }
+.stat .k{ color:var(--faint); }
+.stat.accent b{ color:var(--accent); }
+
+/* ------------------------------ Steuerung ------------------------------ */
+.net-controls{
+  display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr));
+  gap:16px 18px; align-items:end;
+}
+.run-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:16px; }
+.run-hint{ color:var(--faint); font-size:12px; }
+#btn-run.busy .btn-label::after{ content:" …"; }
+
+/* --------------------------- Karten-Canvas ----------------------------- */
+.viewer .canvas-cell{ aspect-ratio:16 / 11; }
+.canvas-cell canvas{ image-rendering:auto; }
+
+/* ------------------------------ Charts --------------------------------- */
+.net-charts{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+@media (max-width:1000px){ .net-charts{ grid-template-columns:1fr; } }
+
+/* ------------------------------- Footer -------------------------------- */
+.foot .foot-note{ display:block; margin-top:4px; color:var(--faint); }
+@media (max-width:720px){
+  .region-row{ flex-direction:column; align-items:stretch; }
+  .net-stats{ justify-content:flex-start; }
+}

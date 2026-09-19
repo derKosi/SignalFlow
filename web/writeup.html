@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>SignalFlow — Writeup</title>
+<style>
+  :root{ --bg:#0b1220; --panel:#131c2b; --panel2:#0f2233; --line:#243244; --ink:#e2e8f0;
+         --mut:#94a3b8; --mut2:#64748b; --acc:#38bdf8; --acc2:#7dd3fc; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.6}
+  a{color:var(--acc2);text-decoration:none} a:hover{text-decoration:underline}
+  .wrap{max-width:1080px;margin:0 auto;padding:0 22px 80px}
+  header.top{display:flex;align-items:center;gap:14px;padding:22px 0;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:linear-gradient(180deg,rgba(11,18,32,.96),rgba(11,18,32,.86));
+    backdrop-filter:blur(6px);z-index:10}
+  .logo{width:30px;height:30px}
+  .brand{font-weight:700;font-size:19px;letter-spacing:.2px}
+  .brand small{display:block;color:var(--mut);font-weight:400;font-size:12.5px;letter-spacing:0}
+  .nav{margin-left:auto;display:flex;gap:14px;flex-wrap:wrap;font-size:13.5px}
+  .nav a{color:var(--mut)} .nav a:hover{color:var(--acc2)}
+  h1{font-size:34px;line-height:1.2;margin:38px 0 8px}
+  h2{font-size:22px;margin:44px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
+  h3{font-size:16px;margin:24px 0 6px;color:var(--acc2)}
+  p{color:#cbd5e1}
+  .lede{font-size:18px;color:var(--mut)}
+  .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:26px 0}
+  .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .kpi .k{color:var(--mut);font-size:12.5px;text-transform:uppercase;letter-spacing:.6px}
+  .kpi .v{font-size:26px;font-weight:700;margin-top:6px}
+  .kpi .d{font-size:13px;color:var(--ok);margin-top:2px}
+  .kpi .d.neg{color:var(--warn)}
+  table{width:100%;border-collapse:collapse;margin:14px 0;font-size:14.5px}
+  th,td{padding:9px 11px;border-bottom:1px solid var(--line);text-align:left}
+  th{color:var(--mut);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.5px}
+  td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
+  .panel.accent{border-color:var(--acc)}
+  figure{margin:22px 0} figure img{width:100%;border:1px solid var(--line);border-radius:12px;display:block}
+  figcaption{color:var(--mut2);font-size:13px;margin-top:8px}
+  .pill{display:inline-block;font-size:12px;color:var(--acc2);border:1px solid #1e3a52;background:var(--panel2);
+    padding:2px 9px;border-radius:999px;margin-right:6px}
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  @media(max-width:760px){.cols{grid-template-columns:1fr}}
+  ol.story{padding-left:20px} ol.story li{margin:10px 0}
+  code{background:#0d1626;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
+  .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
+  .links a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--ink)}
+  .links a:hover{border-color:var(--acc);text-decoration:none}
+  .links a span{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
+  footer{color:var(--mut2);font-size:13px;border-top:1px solid var(--line);margin-top:44px;padding-top:16px}
+  .tag{color:var(--mut2);font-size:13px}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <svg class="logo" viewBox="0 0 32 32"><rect x="11" y="3" width="10" height="26" rx="4" fill="#0e1620" stroke="#243244" stroke-width="1.5"/><circle cx="16" cy="9" r="2.6" fill="#ef4444"/><circle cx="16" cy="16" r="2.6" fill="#f59e0b"/><circle cx="16" cy="23" r="2.6" fill="#22c55e"/></svg>
+    <div class="brand">SignalFlow <small>Adaptive, explainable traffic-signal control</small></div>
+    <nav class="nav">
+      <a href="./">Einzelkreuzung</a>
+      <a href="network.html">Netzwerk-Simulation</a>
+      <a href="../WRITEUP.md">Markdown-Writeup</a>
+      <a href="../docs/README.md">Docs</a>
+    </nav>
+  </header>
+
+  <h1>Adaptive Ampelsteuerung — von einer Kreuzung bis zum ganzen Stadtteil</h1>
+  <p class="lede">Eine verkehrsabhängige Signalsteuerung, die gegen den festen Signalplan
+  gewinnt <em>und</em> jede Entscheidung begründet. Simuliert eine Kreuzung in München —
+  und ein ganzes Viertel auf dem echten OpenStreetMap-Netz.</p>
+
+  <div class="kpis">
+    <div class="kpi"><div class="k">Einzelkreuzung · Ø Verzögerung</div><div class="v">−24,5 %</div><div class="d">53,9 s → 40,7 s</div></div>
+    <div class="kpi"><div class="k">Riem · Ø Verzögerung</div><div class="v">−49,7 %</div><div class="d">58 Kreuzungen</div></div>
+    <div class="kpi"><div class="k">Altstadtring · Ø Verzögerung</div><div class="v">−64,6 %</div><div class="d">708 Kreuzungen · +26 % Durchsatz</div></div>
+    <div class="kpi"><div class="k">Tests</div><div class="v">55 / 55</div><div class="d">deterministisch, seed-bar</div></div>
+  </div>
+
+  <div class="panel accent">
+    <strong>Kurzfassung.</strong> Statt eines festen Signalplans entscheidet ein
+    <em>Queue-Pressure-Regler</em>, welche Phase als nächste Grün bekommt — mit
+    Mindestgrün, Hysterese (kein Grün-Churn) und Hungerschutz. Die Simulation zeigt
+    Vorher/Nachher im Live-Dashboard; jede Phase-Umschaltung wird mit ihren
+    Druckzahlen protokolliert und auf Anfrage in Klartext (Featherless) und Sprache
+    (ElevenLabs) erklärt.
+  </div>
+
+  <h2>Das Problem</h2>
+  <p>Die Ampeln rund um das Münchner Expo-Viertel stauen sich zur Rush Hour, weil ihre
+  Signalzeiten <strong>fest</strong> sind — ein offline geplanter Umlauf, der die
+  Warteschlange vor sich nicht sieht. Die Challenge verlangt ein System, das sich an
+  die aktuelle Lage anpasst <em>und</em> die Verbesserung sichtbar macht. Zwei Fallen
+  stecken darin: eine Lösung, die Anpassung nur <em>behauptet</em> — und eine, die nur
+  an <em>einer</em> Kreuzung funktioniert. SignalFlow vermeidet beide.</p>
+
+  <h2>Was gebaut wurde</h2>
+  <div class="cols">
+    <div class="panel">
+      <span class="pill">/</span><strong>Einzelkreuzung</strong>
+      <p class="tag">Diskretes Warteschlangenmodell (dt = 1 s), 4 Zufahrten mit
+      Linksabbieger-Phasen, Poisson-Nachfrage mit Rush-Hour-Rampe. Zwei Regler auf
+      <em>identischem</em> Verkehr: Fixed-Time vs. Max-Pressure. Live-Replay,
+      KPI-Deltas, Vorher/Nachher, Verzögerungs-Zeitreihe, Entscheidungsprotokoll,
+      „Frag SignalFlow" (LLM + Stimme).</p>
+    </div>
+    <div class="panel">
+      <span class="pill">/network.html</span><strong>Distrikt</strong>
+      <p class="tag">Echtes OSM-Netz zweier auswählbarer Münchner Gebiete — Messe/ICM
+      Riem (355 Knoten, 58 Signale) und Innenstadt/Altstadtring (2597 Knoten, 708
+      Signale). Alle Kreuzungen gleichzeitig, mesoskopisches Link-Queue-Modell,
+      Gravity-OD + Dijkstra-Routing. Karte färbt Straßen nach Stau.</p>
+    </div>
+    <div class="panel">
+      <span class="pill">Sensor-Feed</span><strong>Auf Sensordaten reagieren</strong>
+      <p class="tag">Die Challenge fordert Steuerung, die auf Sensor-/Kamera-Daten
+      reagiert. Datenquelle „Sensor-Feed (CSV)" speist <em>gemessene</em>
+      Detektor-Zählungen ein, inkl. <code>detector_dropout</code> für verpasste
+      Messungen.</p>
+    </div>
+    <div class="panel">
+      <span class="pill">Erklärbar</span><strong>Warum? — nachprüfbar</strong>
+      <p class="tag">Jede Umschaltung wird mit den Drücken pro Phase geloggt:
+      <code>switch NS_THRU→EW_THRU: pressure 9.2 vs 4.1; worst wait 73 s</code>. Das
+      Dashboard zeigt sie live, <code>/api/explain</code> erklärt sie.</p>
+    </div>
+  </div>
+
+  <h2>Ergebnisse</h2>
+  <h3>Einzelkreuzung · 30 min Peak · identischer Verkehr</h3>
+  <table>
+    <tr><th>Metrik</th><th class="num">Fixed-Time</th><th class="num">Adaptiv</th><th class="num">Änderung</th></tr>
+    <tr><td>Ø Verzögerung / Fahrzeug</td><td class="num">53,9 s</td><td class="num"><b>40,7 s</b></td><td class="num"><b>−24,5 %</b></td></tr>
+    <tr><td>Durchsatz</td><td class="num">4365 veh/h</td><td class="num">4410 veh/h</td><td class="num">+1,0 %</td></tr>
+    <tr><td>Verschwendetes Grün</td><td class="num">374 s</td><td class="num">118 s</td><td class="num">−68,4 %</td></tr>
+    <tr><td>CO₂-Proxy (Idle)</td><td class="num">136 951 g</td><td class="num">103 399 g</td><td class="num">−24,5 %</td></tr>
+  </table>
+
+  <h3>Distrikt · 15 min Peak · echtes OSM-Netz · 6 Regionen</h3>
+  <table>
+    <tr><th>Gebiet</th><th class="num">Kreuzungen</th><th class="num">Fixed</th><th class="num">Adaptiv</th><th class="num">Koordiniert (Welle)</th></tr>
+    <tr><td>München — Messe/ICM Riem</td><td class="num">58</td><td class="num">184,8 s</td><td class="num">92,9 s</td><td class="num"><b>70,5 s (−61,9 %)</b></td></tr>
+    <tr><td>München — Altstadtring</td><td class="num">708</td><td class="num">266,5 s</td><td class="num"><b>94,2 s (−64,6 %)</b></td><td class="num">111,0 s (−58,4 %)</td></tr>
+    <tr><td>Berlin — Mitte / Alexanderplatz</td><td class="num">204</td><td class="num">189,1 s</td><td class="num"><b>68,9 s (−63,6 %)</b></td><td class="num">69,8 s (−63,1 %)</td></tr>
+    <tr><td>Hamburg — Innenstadt</td><td class="num">173</td><td class="num">109,5 s</td><td class="num">38,4 s (−65,0 %)</td><td class="num"><b>38,2 s (−65,1 %)</b></td></tr>
+    <tr><td>Köln — Dom &amp; Deutz</td><td class="num">102</td><td class="num">150,6 s</td><td class="num"><b>47,4 s (−68,5 %)</b></td><td class="num">58,0 s (−61,5 %)</td></tr>
+    <tr><td>Heidelberg — Altstadt / Uni</td><td class="num">81</td><td class="num">236,3 s</td><td class="num"><b>44,5 s (−81,2 %)</b></td><td class="num">75,5 s (−68,1 %)</td></tr>
+  </table>
+  <p class="tag">Über ein Nachfrage-Raster (0,8×–1,1×, flat &amp; peak): mittlere
+  Verzögerungsreduktion 39,9 % (54,8 % bei freier Fahrt, 16 % bei Überlast).</p>
+
+  <div class="panel">
+    <span class="pill">Grüne Welle</span><strong>Corridor-Koordinierung (dritter Regler)</strong>
+    <p class="tag">Die längste Arterial-Route bekommt einen gemeinsamen Umlauf (100 s)
+    und platoon-getimte Offsets (95 % der Freifahrt-Geschwindigkeit); alle anderen
+    Kreuzungen bleiben voll adaptiv. <b>Ehrliches Ergebnis:</b> Auf einer sauberen
+    Arterial (Riem) gewinnt die feste Welle gegen reine Adaptivität (−61,9 % vs
+    −49,7 %); im dichten Altstadtring gewinnt die adaptive Steuerung (−64,6 % vs
+    −58,4 %). Beide schlagen den festen Plan.</p>
+  </div>
+
+  <div class="panel">
+    <span class="pill">Echt-Feed</span><strong>Bereit für einen späteren Sensordaten-Feed</strong>
+    <p class="tag">Der Sensor-Feed akzeptiert lokale CSV <b>oder eine http(s)-URL</b> —
+    ein echter, veröffentlichter Detektor-Feed lässt sich also später ohne
+    Code-Änderung einklinken (<code>arrival_source=csv</code>, <code>arrival_csv=https://…</code>,
+    optional <code>detector_dropout</code>).</p>
+  </div>
+
+  <h2>Wie es rechnet</h2>
+  <p><strong>Einzelkreuzung:</strong> diskretes Warteschlangenmodell, Sättigungsfluss
+  1800 veh/h/Spur, vier geschützte Phasen; Verzögerung = Σ(Queue)·dt. <br>
+  <strong>Distrikt:</strong> mesoskopisches <em>Link-Queue</em>-Modell auf dem
+  OSM-Graphen — je Link Freifahrt-Zeit + Haltelinien-Queue, Abfluss begrenzt durch
+  Sättigungsfluss, Speicherplatz stromabwärts (Spillback) und Signalphase;
+  Gravity-OD-Matrix mit Dijkstra-Routing, pro Link getrennt in Durchgangs- und
+  Zielanteil. <br>
+  <strong>Regler:</strong> Max-Pressure mit Mindestgrün, Hysterese, Early-Exit für
+  leere Phasen und Hungerschutz — kalibriert über ein Nachfrage-Raster. <br>
+  <strong>Fairer Baseline-Vergleich ohne Oracle:</strong> ein zusätzlicher fester Plan
+  wird rein aus <em>Haltelinien-Detektor-Zählungen</em> getunt (Richardson-Lucy-OD-Schätzung)
+  und holt 80–100 % des Orakel-Gewinns; mit opt-in Webster-Zyklus schlägt adaptiv das
+  Orakel auf Riem (+8,2 %) und Köln (+2,5 %).</p>
+
+  <h2>Die Engineering-Geschichte</h2>
+  <p>Das Spannende war nicht der Regler, sondern das Messen, <em>warum</em> die
+  naheliegenden Versionen falsch waren:</p>
+  <ol class="story">
+    <li><strong>Der erste adaptive Regler war schlechter als fest.</strong>
+      −57 % Verbesserung = Rückschritt. Grund: so häufiges Umschalten, dass Räumzeit
+      das Grün frisst (245 s vs. 92 s). Fix: Mindestgrün, Hysterese, Early-Exit nur für
+      leere Phasen + Kalibrierung.</li>
+    <li><strong>Die OD-Matrix verlor den meisten Verkehr.</strong> Nur ~40 % der
+      Nachfrage geladen → Gridlock. Grund: viele Entry→Exit-Paare sind auf dem
+      gerichteten Graphen unerreichbar (Einbahnstraßen). Fix: nur erreichbare Paare,
+      auf Gesamtnachfrage normiert.</li>
+    <li><strong>Fahrzeuge am Ziel fuhren weiter.</strong> Ziel-Trips wurden von den
+      Link-Turn-Fractions weitergeschickt → Endlosschleifen, Trips unterzählt. Fix:
+      expliziter <em>Exit-Share</em> pro Link.</li>
+    <li><strong>Zwei-Richtungs-Straßen deadlockten.</strong> Harte Speichergrenze →
+      zyklische Blockade (Delay &gt; 1800 s). Fix: weiche Obergrenze (×1,35).</li>
+    <li><strong>Ein Alias-Bug, den ein Glückstest verdeckte.</strong> Der Compiler
+      löste Knoten-IDs mit der <em>Link</em>-Map auf — im Mini-Testgitter zufällig
+      richtig, in echten Daten verschwanden alle Kreuzungen. Von „still 0" zu einer
+      echten Simulation.</li>
+  </ol>
+  <p class="tag">Jeder Punkt ist als ADR festgehalten: <a href="../docs/design-decisions.md">docs/design-decisions.md</a>.</p>
+
+  <h2>Architektur &amp; Regelkreis</h2>
+  <figure>
+    <img src="assets/architecture.png" alt="SignalFlow Architektur und Regelkreis, inkl. Distrikt-Modus" />
+    <figcaption>Pipeline von der Nachfrage über Fixed-/Adaptiv-Regler und Modell zu
+    Metriken und Dashboards; rechts die erklärenden Agenten (Featherless, ElevenLabs);
+    gestrichelt der Regelkreis Queue → Druck → Phasenentscheidung.</figcaption>
+  </figure>
+
+  <h2>Ehrliche Grenzen</h2>
+  <ul>
+    <li>Makro-/mesoskopisch, keine Fahrzeug-Mikrosimulation (kein Spurwechsel, keine
+      Zeitlücken-Akzeptanz an unsignalisierten Knoten).</li>
+    <li>Keine Koordinierung zwischen Kreuzungen (keine grüne Welle).</li>
+    <li>Die Fixed-Time-Baseline ist ein plausibler, generischer Plan — nicht lokal
+      optimiert.</li>
+    <li>CO₂ ist ein Idle-Zeit-Proxy; die Distrikt-Nachfrage ist synthetisch.</li>
+    <li>Der echte Briefing-Datensatz ersetzt den synthetischen Feed per
+      <code>arrival_csv</code> — ohne Code-Änderung.</li>
+  </ul>
+
+  <h2>Starten</h2>
+  <div class="panel">
+    <code>cd signalflow &amp;&amp; ./run.sh</code>
+    <p class="tag">Keine Abhängigkeiten außer Python 3.11+. Ein Befehl, kein Build.
+    Tests: <code>python3 -m unittest discover -s tests</code> → 55 grün.</p>
+  </div>
+
+  <h2>Weiterlesen</h2>
+  <div class="links">
+    <a href="../README.md">README<span>Überblick, Nutzung, Key-Setup</span></a>
+    <a href="../WRITEUP.md">Writeup (Markdown)<span>dieselbe Geschichte als Text</span></a>
+    <a href="../docs/architecture.md">Architektur<span>Komponenten &amp; Datenfluss</span></a>
+    <a href="../docs/model.md">Modell<span>Gleichungen, Annahmen, Einheiten</span></a>
+    <a href="../docs/results.md">Ergebnisse<span>Zahlen &amp; Reproduktion</span></a>
+    <a href="../docs/design-decisions.md">Design-Entscheidungen<span>ADR-Log inkl. Bugs</span></a>
+    <a href="../docs/api.md">API<span>Endpunkte &amp; Schemas</span></a>
+    <a href="../docs/challenge.md">Challenge-Mapping<span>Kriterien &amp; Preis-Strategie</span></a>
+  </div>
+
+  <footer>
+    SignalFlow · Python-Stdlib + Vanilla-JS · deterministische Seeds.
+    Straßendaten © OpenStreetMap-Mitwirkende (ODbL). Skript-Skizze: für das
+    Hackathon-Video gedacht.
+  </footer>
+</div>
+</body>
+</html>

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signalflow"
+version = "0.1.0"
+description = "Adaptive, explainable traffic-signal control — from one junction to a whole city district"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "SignalFlow contributors" }]
+keywords = ["traffic", "signals", "simulation", "adaptive", "openstreetmap", "hackathon"]
+classifiers = [
+  "Programming Language :: Python :: 3",
+  # PolyForm Noncommercial 1.0.0 is source-available but NOT OSI-approved,
+  # so no OSI classifier here (see docs/licensing.md).
+  "Topic :: Scientific/Engineering :: GIS",
+]
+# No runtime dependencies — Python standard library only.
+dependencies = []
+
+[project.scripts]
+signalflow = "server:main"
+signalflow-geofetch = "signalflow.geofetch:add_region"
+
+[tool.setuptools]
+packages = ["signalflow"]

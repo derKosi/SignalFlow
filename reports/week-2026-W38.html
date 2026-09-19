@@ -1,0 +1,52 @@
+<!doctype html><meta charset='utf-8'><title>SignalFlow Wochenbericht</title><style>body{font:12pt/1.5 Georgia,serif;max-width:19cm;margin:2cm auto;color:#111}h1{font-size:20pt;margin:0}h2{font-size:14pt;margin:1.2em 0 .3em;border-bottom:1px solid #ccc}table{border-collapse:collapse;width:100%;margin:.6em 0}td{border:1px solid #bbb;padding:4pt 6pt}td:first-child{text-align:left}pre{background:#f4f4f4;padding:8pt;font-size:9pt}li{margin:.2em 0}</style>2026-09-19<hr><p><h1>SignalFlow — Verkehrs-Wochenbericht</h1></p>
+<p><strong>KW 38 / 2026</strong> · generiert 2026-09-19 ·</p>
+<p>seed 42 · reproduzierbar aus dem Repository (Befehle unten).</p>
+<p><h2>Kernaussagen</h2></p>
+<p>Über alle vier Tagestypen senkt die adaptive Steuerung die mittlere Verzögerung je Fahrzeug: Normaltag 24,5 %, Berufsverkehr 13,1 %, Ferien 55,2 %. Der größte absolute Gewinn entsteht im Berufsverkehr: 66,6 s → <strong>57,9 s</strong> je Fahrzeug. Im Stadtteil „Messe Muenchen / ICM Riem“ verbessert sich die Reisezeit um 38,1 % gegenüber dem festen Plan. (Deterministische Zusammenfassung — ohne LLM-Schlüssel erzeugt.)</p>
+<p>*(LLM-Zusammenfassung verworfen: unbelegte Zahlen [9273.0].)*</p>
+<p>*(Zusammenfassung: Featherless, Qwen/Qwen2.5-7B-Instruct.)*</p>
+<p><h2>Einzelknoten — Szenarien im Wochenvergleich</h2></p>
+<p>Vier Tagestypen, je 30 min Simulation mit</p>
+<p>identischem Reisendenstrom pro Vergleich (Poisson-Modell, seed 42):</p>
+<table>
+<tr><td>Szenario</td><td>Ø Verzögerung fix</td><td>Ø Verzögerung adaptiv</td><td>Δ Verzögerung</td><td>Durchsatz adaptiv</td><td>CO₂-Proxy Δ</td></tr>
+<tr><td>Normal</td><td>53,9 s</td><td><strong>40,7 s</strong></td><td><strong>−24,5 %</strong></td><td>4 410 Fz/h</td><td>−24,5 %</td></tr>
+<tr><td>Berufsverkehr (Rush)</td><td>66,6 s</td><td><strong>57,9 s</strong></td><td><strong>−13,1 %</strong></td><td>4 833 Fz/h</td><td>−13,2 %</td></tr>
+<tr><td>Ferien</td><td>28,6 s</td><td><strong>12,8 s</strong></td><td><strong>−55,2 %</strong></td><td>2 500 Fz/h</td><td>−55,2 %</td></tr>
+<tr><td>Freizeit / Wochenende</td><td>29,8 s</td><td><strong>15,8 s</strong></td><td><strong>−47,1 %</strong></td><td>2 460 Fz/h</td><td>−47,1 %</td></tr>
+</table>
+<p>Auf dem Normaltag: 53,9 s →</p>
+<p><strong>40,7 s</strong> mittlere Verzögerung</p>
+<p>(−24,5 %), weggeworfene Grünzeit</p>
+<p>374 s →</p>
+<p>118 s.</p>
+<p><h2>Entscheidungen im Log (Auszug)</h2></p>
+<p>Jede Phasenschaltung ist mit ihren Drücken protokolliert — Auszüge:</p>
+<li><strong>Normal</strong>, t=5 s: NS_THRU → NS_LEFT — switch NS_THRU-&gt;NS_LEFT (phase served out (empty queue)): pressure 1.0 vs current 0.0; worst wait 5s</li>
+<li><strong>Normal</strong>, t=716 s: NS_THRU → NS_LEFT — switch NS_THRU-&gt;NS_LEFT (higher competing pressure): pressure 22.2 vs current 6.0; worst wait 121s</li>
+<li><strong>Berufsverkehr (Rush)</strong>, t=5 s: NS_THRU → NS_LEFT — switch NS_THRU-&gt;NS_LEFT (phase served out (empty queue)): pressure 1.0 vs current 0.0; worst wait 5s</li>
+<li><strong>Berufsverkehr (Rush)</strong>, t=923 s: NS_THRU → EW_THRU — switch NS_THRU-&gt;EW_THRU (phase served out (empty queue)): pressure 4.0 vs current 0.0; worst wait 50s</li>
+<li><strong>Ferien</strong>, t=5 s: NS_THRU → NS_LEFT — switch NS_THRU-&gt;NS_LEFT (phase served out (empty queue)): pressure 1.0 vs current 0.0; worst wait 5s</li>
+<li><strong>Ferien</strong>, t=875 s: EW_LEFT → EW_THRU — switch EW_LEFT-&gt;EW_THRU (phase served out (empty queue)): pressure 1.0 vs current 0.0; worst wait 32s</li>
+<li><strong>Freizeit / Wochenende</strong>, t=5 s: NS_THRU → NS_LEFT — switch NS_THRU-&gt;NS_LEFT (phase served out (empty queue)): pressure 1.0 vs current 0.0; worst wait 5s</li>
+<li><strong>Freizeit / Wochenende</strong>, t=842 s: EW_THRU → NS_LEFT — switch EW_THRU-&gt;NS_LEFT (phase served out (empty queue)): pressure 6.0 vs current 0.0; worst wait 83s</li>
+<p><h2>Stadtteil „Messe Muenchen / ICM Riem“ (`expo_riem`)</h2></p>
+<p>Mesoskopischer Lauf auf dem echten OSM-Netz (24 Zu-/ 24 Abfahrten, 15 min, seed 42):</p>
+<table>
+<tr><td>Strategie</td><td>Ø Verzögerung</td><td>Ø Reisezeit</td><td>Durchsatz</td><td>CO₂-Proxy</td></tr>
+<tr><td>Fester Fahrplan</td><td>184,8 s</td><td>272,9 s</td><td>2 985 Fz/h</td><td>158 592 g</td></tr>
+<tr><td>Tuned (Oracle)</td><td>85,8 s</td><td>161,4 s</td><td>3 483 Fz/h</td><td>85 898 g</td></tr>
+<tr><td>Tuned* (Count-Schätzung)</td><td>105,7 s</td><td>181,0 s</td><td>3 389 Fz/h</td><td>102 951 g</td></tr>
+<tr><td>Adaptiv</td><td>92,7 s</td><td>169,0 s</td><td>3 452 Fz/h</td><td>92 028 g</td></tr>
+<tr><td>Grüne Welle</td><td>86,8 s</td><td>171,7 s</td><td>3 497 Fz/h</td><td>87 305 g</td></tr>
+</table>
+<p>Adaptiv gegenüber festem Fahrplan: <strong>−49,8 % Verzögerung</strong>, −38,1 % Reisezeit, −42,0 % CO₂-Proxy. Die grüne Welle erreicht −53,0 % auf den Korridoren; der count-basierte Tuned*-Vergleich liegt bei −12,2 % (ohne Oracle-Wissen).</p>
+<p><h2>Methodik &amp; Reproduktion</h2></p>
+<p><pre>python3 tools/report.py --out reports/week-2026-W38.md</p>
+<p><h1>identische Zahlen, direkt aus der Simulation:</h1></p>
+<p>python3 -c "from signalflow.simulation import run_scenario; import json; \</p>
+<p>print(json.dumps(run_scenario({'duration_min': 30})['improvement'], indent=2))"</p>
+<p></pre></p>
+<p>Modellgrenzen (ehrlich): mesoskopisches Warteschlangenmodell, keine validierte</p>
+<p>Mikrosimulation; Sättigungsfluss/PCE sind Defaults; Bezugsgrößen sind synthetische</p>
+<p>Nachfrage-Szenarien; die Stadtteil-Matrix ist gravitätsbasiert bzw. count-geschätzt.</p>
