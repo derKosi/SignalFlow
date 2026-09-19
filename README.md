@@ -35,7 +35,9 @@ oversaturation). Reproduce: `python3 -m signalflow.simulation`.
 ## Documentation
 
 * **[Writeup](WRITEUP.md)** — the full story (problem → approach → results → limits).
-  Also as a rendered page: **<http://127.0.0.1:8000/writeup.html>**.
+  In four versions: [Deutsch ausführlich](WRITEUP.md) · [Deutsch einfach](WRITEUP.einfach.md) ·
+  [English detailed](WRITEUP.en.md) · [English simple](WRITEUP.en-simple.md) —
+  also as a rendered, switchable page: **<http://127.0.0.1:8000/writeup.html>**.
 * **[Handoff](HANDOFF.md)** — pick this up cold: state, run commands, gotchas, open TODOs.
 * **[docs/](docs/README.md)** — architecture, models, controllers, API, data, results,
   design decisions (ADR log), challenge/prize mapping, roadmap, references, submission kit.

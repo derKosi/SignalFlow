@@ -39,7 +39,9 @@ from signalflow.simulation import (  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent
 WEB = ROOT / "web"
-ROOT_FILES = {"README.md", "WRITEUP.md", "SUBMISSION.md", "DEMO.md", "NOTICE.md", "LICENSE", "HANDOFF.md"}
+ROOT_FILES = {"README.md", "WRITEUP.md", "WRITEUP.einfach.md", "WRITEUP.en.md",
+              "WRITEUP.en-simple.md", "SUBMISSION.md", "DEMO.md", "NOTICE.md",
+              "LICENSE", "HANDOFF.md"}
 CACHE_DIR = ROOT / "data" / "cache"        # disk cache: instant repeated/demo runs
 
 
