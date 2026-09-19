@@ -345,8 +345,8 @@
       card.innerHTML = `
         <header><h3 title="${m.info}">${m.title}</h3><span class="unit">${m.unit}</span></header>
         <div class="kpi-rows">
-          <div class="row fixed"><span class="tag" title="${POLICY_INFO.fixed}">${refL}</span><span class="val"><b data-kpi="${m.key}-fixed">–</b></span></div>
-          <div class="row adaptive"><span class="tag" title="${POLICY_INFO.adaptive}">${altL}</span><span class="val"><b data-kpi="${m.key}-adaptive">–</b><i class="dlt neutral" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i></span></div>
+          <div class="row fixed"><span class="tag" title="${POLICY_INFO.fixed}">${refL}</span><i class="dlt"></i><b data-kpi="${m.key}-fixed">–</b></div>
+          <div class="row adaptive"><span class="tag" title="${POLICY_INFO.adaptive}">${altL}</span><i class="dlt" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i><b data-kpi="${m.key}-adaptive">–</b></div>
         </div>`;
       grid.appendChild(card);
     }
@@ -367,14 +367,15 @@
     const refL = jl.reference_label || 'Fixed';
     const altL = jl.alternative_label || 'Adaptive';
     const head = KPI_META.map((m) =>
-      `<th title="${m.info}">${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
+      `<th colspan="2" title="${m.info}">${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
+    const subHeads = KPI_META.map(() => '<th class="sub">Wert</th><th class="sub">Δ</th>').join('');
     const fixedCells = KPI_META.map((m) =>
-      `<td class="v" data-kpi="${m.key}-fixed">–</td>`).join('');
+      `<td class="v" data-kpi="${m.key}-fixed">–</td><td class="dltc">–</td>`).join('');
     const adaptiveCells = KPI_META.map((m) =>
-      `<td class="v adaptive-v"><span data-kpi="${m.key}-adaptive">–</span>` +
-      `<br><i class="dlt neutral" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i></td>`).join('');
+      `<td class="v adaptive-v" data-kpi="${m.key}-adaptive">–</td>` +
+      `<td class="dltc"><i class="dlt" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i></td>`).join('');
     wrap.innerHTML = `<table class="kpi-table">
-      <thead><tr><th></th>${head}</tr></thead>
+      <thead><tr><th rowspan="2"></th>${head}</tr><tr>${subHeads}</tr></thead>
       <tbody>
         <tr class="pol-fixed"><th class="pol" title="${POLICY_INFO.fixed}">${refL}</th>${fixedCells}</tr>
         <tr class="pol-adaptive"><th class="pol" title="${POLICY_INFO.adaptive}">${altL}</th>${adaptiveCells}</tr>
@@ -417,17 +418,10 @@
       all(m.key + '-adaptive').forEach((el) => el.classList.toggle('best', tie || betterAdaptive));
 
       all(m.key + '-delta').forEach((dEl) => {
-        dEl.classList.remove('good', 'bad', 'neutral');
-        if (!fv) {
-          dEl.textContent = 'n/a';
-          dEl.classList.add('neutral');
-          return;
-        }
+        if (!fv) { dEl.textContent = 'n/a'; return; }
         // signed improvement: > 0 always means "better than Fixed-Time"
         const pct = m.dir === 'up' ? (av - fv) / fv * 100 : (fv - av) / fv * 100;
-        const arrow = (av - fv) < 0 ? '▼' : ((av - fv) > 0 ? '▲' : '＝');
-        dEl.textContent = `${arrow} ${fmt(Math.abs(pct), 1)} %`;
-        dEl.classList.add(pct > 5 ? 'good' : (pct < -5 ? 'bad' : 'mid'));
+        dEl.textContent = (pct >= 0 ? '+' : '−') + fmt(Math.abs(pct), 1) + ' %';
         dEl.title = pct >= 0 ? 'Verbesserung gegenüber Fixed-Time' : 'Verschlechterung gegenüber Fixed-Time';
       });
     }

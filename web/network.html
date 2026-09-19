@@ -168,6 +168,7 @@
       <div class="modes" role="group" aria-label="Controller-Ansicht">
         <button class="mode-btn" data-mode="fixed" type="button">Fixed</button>
         <button class="mode-btn" data-mode="adaptive" type="button">Adaptive</button>
+        <button class="mode-btn" data-mode="coordinated" type="button" title="Grüne Welle: gemeinsamer Zyklus + Versatz-Offsets — die dritte animierbare Strategie (Tuned* liefert nur Kennzahlen, keine Animation)">Koord.</button>
         <button class="mode-btn active" data-mode="both" type="button">Beide</button>
       </div>
 
@@ -262,7 +263,10 @@
       <h2 id="drill-title">Knoten</h2>
       <p class="panel-sub" id="drill-sub"></p>
     </div>
-    <button class="btn ghost icon" id="drill-close" type="button" title="Schließen">✕</button>
+    <div class="drill-actions">
+      <button class="btn ghost icon" id="drill-size" type="button" title="Größe wechseln">⛶</button>
+      <button class="btn ghost icon" id="drill-close" type="button" title="Schließen">✕</button>
+    </div>
   </div>
   <canvas id="drill-canvas"></canvas>
 </aside>

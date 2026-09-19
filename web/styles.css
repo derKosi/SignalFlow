@@ -198,6 +198,14 @@ select{
 .delta.neutral{ color:var(--muted); }
 .delta.mid{ color:var(--yellow); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); }
 
+/* Karten-Zeilen: Label | Δ (Zeilenfarbe) | Wert — bester Wert fett */
+.kpi .row{ display:grid; grid-template-columns:1fr auto minmax(64px, auto); gap:8px; align-items:baseline; }
+.kpi .row b{ justify-self:end; }
+.kpi .row.fixed b{ color:#aab6c4; }
+.kpi .row.adaptive b{ color:var(--accent); }
+.kpi .row.fixed .dlt{ color:#8d9aad; }
+.kpi .row.adaptive .dlt{ color:var(--accent); opacity:.85; }
+
 /* ------------- KPI panel: cards ⇄ compact matrix table ----------------- */
 .kpi-panel{ }
 .kpi-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
@@ -218,6 +226,16 @@ table.kpi-table th:first-child, table.kpi-table td:first-child{ text-align:left;
 table.kpi-table thead th{
   color:var(--muted); font-weight:550; font-size:12px; white-space:nowrap;
 }
+table.kpi-table thead th.sub{
+  color:var(--faint); font-size:10.5px; font-weight:500; padding-top:0; padding-bottom:6px;
+}
+table.kpi-table td.dltc{
+  font-family:var(--mono); font-size:11.5px; padding-left:4px; white-space:nowrap;
+}
+table.kpi-table tr.pol-fixed td.dltc{ color:#8d9aad; }
+table.kpi-table tr.pol-adaptive td.dltc{ color:var(--accent); }
+table.kpi-table tr.pol-coordinated td.dltc{ color:#f5c451; }
+table.kpi-table tr.pol-tuned td.dltc{ color:#7fd1a8; }
 table.kpi-table thead th .unit{ color:var(--faint); font-family:var(--mono); font-size:10.5px; }
 table.kpi-table tbody th.pol{ color:var(--muted); font-weight:550; font-size:12.5px; white-space:nowrap; cursor:help; }
 table.kpi-table tbody th.pol-adaptive{ color:var(--accent); }

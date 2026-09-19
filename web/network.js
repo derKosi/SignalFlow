@@ -265,6 +265,7 @@
     state.frames = {
       fixed: (res.frames && res.frames.fixed) || [],
       adaptive: (res.frames && res.frames.adaptive) || [],
+      coordinated: (res.frames && res.frames.coordinated) || [],
     };
     state.steps = (res.meta && res.meta.steps) || (res.config ? res.config.duration_min * 60 : 0);
     state.frameDt = (res.meta && res.meta.frame_dt) || (res.config && res.config.frame_dt) || 3;
@@ -290,7 +291,8 @@
         return t;
       });
     }
-    state.series = { fixed: sumSeries(state.frames.fixed), adaptive: sumSeries(state.frames.adaptive) };
+    state.series = { fixed: sumSeries(state.frames.fixed), adaptive: sumSeries(state.frames.adaptive),
+                     coordinated: sumSeries(state.frames.coordinated) };
 
     // Region-Meta (Name/BBox) mit Antwort abgleichen
     state.regionMeta = state.regionMeta || {};
@@ -499,8 +501,11 @@
       drawNetwork($('canvas-alt'), 'adaptive');
     } else {
       wrap.classList.remove('dual');
-      if (titleMain) titleMain.textContent = state.mode === 'fixed' ? 'Fixed-Time' : 'Adaptive';
-      drawNetwork(cMain, state.mode === 'fixed' ? 'fixed' : 'adaptive');
+      if (titleMain) {
+        titleMain.textContent = state.mode === 'fixed' ? 'Fixed-Time'
+          : (state.mode === 'coordinated' ? 'Koord. (Welle)' : 'Adaptive');
+      }
+      drawNetwork(cMain, state.mode === 'fixed' ? 'fixed' : state.mode);
     }
 
     // Readouts
@@ -508,7 +513,8 @@
     if (tEl) tEl.textContent = 't ' + timeStr(state.t) + ' / ' + timeStr(state.steps);
     const qEl = $('playhead-q');
     if (qEl) {
-      const arr = state.series[state.mode === 'fixed' ? 'fixed' : 'adaptive'] || [];
+      const serKey = state.mode === 'both' ? 'adaptive' : state.mode;
+      const arr = state.series[serKey] || [];
       const idx = state.steps ? clamp(Math.round(state.t / Math.max(1, state.frameDt)), 0, arr.length - 1) : 0;
       qEl.textContent = arr.length ? fmt(arr[idx] || 0, 0) + ' veh' : '–';
     }
@@ -598,11 +604,11 @@
     const d = state.drill;
     if (!d) return;
     const title = $('drill-title'), sub = $('drill-sub');
-    const which = state.mode === 'fixed' ? 'fixed' : 'adaptive';
+    const label = state.mode === 'fixed' ? 'Fixed-Time'
+      : (state.mode === 'coordinated' ? 'Koord. (Welle)' : 'Adaptiv');
     if (title) title.textContent = d.type + ' · ' + d.arms.length + ' Straßen';
     if (sub) {
-      sub.textContent = (d.names.length ? d.names.join(' · ') + ' — ' : '') +
-        (which === 'fixed' ? 'Fixed-Time' : 'Adaptiv') + ' · Norden oben';
+      sub.textContent = (d.names.length ? d.names.join(' · ') + ' — ' : '') + label + ' · Norden oben';
       sub.title = 'Knoten ' + d.nodeId;
     }
   }
@@ -611,7 +617,8 @@
     const d = state.drill;
     const canvas = $('drill-canvas');
     if (!d || !canvas || !state.result) return;
-    const which = state.mode === 'fixed' ? 'fixed' : 'adaptive';
+    const which = state.mode === 'fixed' ? 'fixed'
+      : (state.mode === 'coordinated' ? 'coordinated' : 'adaptive');
     const frames = state.frames[which] || [];
     const f = frames.length ? frames[frameIndex(frames, state.t)] : null;
     const qmap = new Map(), phmap = new Map();
@@ -820,21 +827,25 @@
         teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span><b>' + fmt(m.get(te), m.dec) + '</b></div>';
       }
       const win = winnerOf(m);
-      const val = (v, isWin, dltHtml) =>
-        '<span class="val"><b class="' + (isWin ? 'best' : '') + '">' + v + '</b>' + dltHtml + '</span>';
+      // 3-Spalten-Zeile: Label | Δ% (Zeilenfarbe) | Wert (bester fett)
+      const row = (cls, label, info, v, isWin, dlt) =>
+        '<div class="row ' + cls + '"><span class="tag" title="' + info + '">' + label + '</span>' +
+        '<i class="dlt">' + dlt + '</i>' +
+        '<b class="' + (isWin ? 'best' : '') + '">' + v + '</b></div>';
       if (co && m.get(co) != null) {
-        coRow = '<div class="row coordinated"><span class="tag" title="' + POLICY_INFO.coordinated + '">Koord.</span>' +
-          val(fmt(m.get(co), m.dec), win === 'coordinated', dltOf(m, m.get(co), fv)) + '</div>';
+        coRow = row('coordinated', 'Koord.', POLICY_INFO.coordinated, fmt(m.get(co), m.dec),
+                    win === 'coordinated', dltOf(m, m.get(co), fv).replace(/<\/?i[^>]*>/g, ''));
       }
       if (te && m.get(te) != null) {
-        teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span>' +
-          val(fmt(m.get(te), m.dec), win === 'tuned', dltOf(m, m.get(te), fv)) + '</div>';
+        teRow = row('tuned-est', 'Tuned*', POLICY_INFO.tuned, fmt(m.get(te), m.dec),
+                    win === 'tuned', dltOf(m, m.get(te), fv).replace(/<\/?i[^>]*>/g, ''));
       }
       html += '<div class="kpi">' +
         '<header><h3 title="' + m.info + '">' + m.title + '</h3><span class="unit">' + (m.unit || '') + '</span></header>' +
         '<div class="kpi-rows">' +
-        '<div class="row fixed"><span class="tag" title="' + POLICY_INFO.fixed + '">Fixed</span>' + val(fmt(fv, m.dec), win === 'fixed', '') + '</div>' +
-        '<div class="row adaptive"><span class="tag" title="' + POLICY_INFO.adaptive + '">Adaptiv</span>' + val(fmt(av, m.dec), win === 'adaptive', dltOf(m, av, fv)) + '</div>' +
+        row('fixed', 'Fixed', POLICY_INFO.fixed, fmt(fv, m.dec), win === 'fixed', '') +
+        row('adaptive', 'Adaptiv', POLICY_INFO.adaptive, fmt(av, m.dec), win === 'adaptive',
+            dltOf(m, av, fv).replace(/<\/?i[^>]*>/g, '')) +
         coRow +
         teRow +
         '</div>' +
@@ -842,36 +853,40 @@
     });
     grid.innerHTML = html;
     if (tableWrap) {
-      // transposed matrix: policies as rows, metrics as columns,
-      // traffic-light deltas (green/orange/red) under the values,
-      // winner per column bold
+      // gruppierte Matrix: je Kennzahl zwei Spalten (Wert | Δ vs. Fixed) unter
+      // einer Überschrift; Werte + Δ in Strategien-Farbe, bester Wert fett
+      const dltTxt = function (m, val, base) {
+        if (base == null || !base || val == null) return '–';
+        const dd = deltaPct(base, val, m.dir);
+        return (dd > 0 ? '+' : '') + fmt(dd, 1) + ' %';
+      };
       const headCells = KPI_META.map(function (m) {
-        return '<th title="' + m.info + '">' + m.title + (m.unit ? ' <span class="unit">' + m.unit + '</span>' : '') + '</th>';
+        return '<th colspan="2" title="' + m.info + '">' + m.title + (m.unit ? ' <span class="unit">' + m.unit + '</span>' : '') + '</th>';
       }).join('');
+      const subHeads = KPI_META.map(function () {
+        return '<th class="sub">Wert</th><th class="sub">Δ</th>';
+      }).join('');
+      const cells = function (src, pol) {
+        return KPI_META.map(function (m) {
+          const best = winnerOf(m) === pol ? ' best' : '';
+          return '<td class="v' + best + '">' + fmt(m.get(src), m.dec) + '</td>' +
+                 '<td class="dltc">' + dltTxt(m, m.get(src), m.get(fx)) + '</td>';
+        }).join('');
+      };
       const fixedCells = KPI_META.map(function (m) {
-        return '<td class="v' + (winnerOf(m) === 'fixed' ? ' best' : '') + '">' + fmt(m.get(fx), m.dec) + '</td>';
-      }).join('');
-      const adaptiveCells = KPI_META.map(function (m) {
-        return '<td class="v' + (winnerOf(m) === 'adaptive' ? ' best' : '') + '">' + fmt(m.get(ad), m.dec) +
-          '<br>' + dltOf(m, m.get(ad), m.get(fx)) + '</td>';
+        return '<td class="v' + (winnerOf(m) === 'fixed' ? ' best' : '') + '">' + fmt(m.get(fx), m.dec) + '</td><td class="dltc">–</td>';
       }).join('');
       let extraRows = '';
       if (co) {
-        extraRows += '<tr class="pol-coordinated"><th class="pol" title="' + POLICY_INFO.coordinated + '">Koord.</th>' + KPI_META.map(function (m) {
-          return '<td class="v' + (winnerOf(m) === 'coordinated' ? ' best' : '') + '">' + fmt(m.get(co), m.dec) +
-            '<br>' + dltOf(m, m.get(co), m.get(fx)) + '</td>';
-        }).join('') + '</tr>';
+        extraRows += '<tr class="pol-coordinated"><th class="pol" title="' + POLICY_INFO.coordinated + '">Koord.</th>' + cells(co, 'coordinated') + '</tr>';
       }
       if (te) {
-        extraRows += '<tr class="pol-tuned"><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned*</th>' +
-          KPI_META.map(function (m) {
-            return '<td class="v' + (winnerOf(m) === 'tuned' ? ' best' : '') + '">' + fmt(m.get(te), m.dec) +
-              '<br>' + dltOf(m, m.get(te), m.get(fx)) + '</td>';
-          }).join('') + '</tr>';
+        extraRows += '<tr class="pol-tuned"><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned*</th>' + cells(te, 'tuned') + '</tr>';
       }
-      tableWrap.innerHTML = '<table class="kpi-table"><thead><tr><th></th>' + headCells + '</tr></thead><tbody>' +
+      tableWrap.innerHTML = '<table class="kpi-table">' +
+        '<thead><tr><th rowspan="2"></th>' + headCells + '</tr><tr>' + subHeads + '</tr></thead><tbody>' +
         '<tr class="pol-fixed"><th class="pol" title="' + POLICY_INFO.fixed + '">Fixed</th>' + fixedCells + '</tr>' +
-        '<tr class="pol-adaptive"><th class="pol" title="' + POLICY_INFO.adaptive + '">Adaptiv</th>' + adaptiveCells + '</tr>' +
+        '<tr class="pol-adaptive"><th class="pol" title="' + POLICY_INFO.adaptive + '">Adaptiv</th>' + cells(ad, 'adaptive') + '</tr>' +
         extraRows + '</tbody></table>';
     }
   }
@@ -1260,12 +1275,20 @@
     });
     const dclose = $('drill-close');
     if (dclose) dclose.addEventListener('click', closeDrill);
+    // Overlay vergrößern/verkleinern (400 ↔ 640 px)
+    const dsize = $('drill-size');
+    if (dsize) dsize.addEventListener('click', function () {
+      const panel = $('drill');
+      if (!panel) return;
+      panel.classList.toggle('big');
+      drawDrill();
+    });
     // Overlay an der Kopfzeile verschiebbar machen (PiP-Stil)
     const drillPanel = $('drill');
     if (drillPanel) {
       let dragX = 0, dragY = 0, dragging = false;
       drillPanel.addEventListener('pointerdown', function (ev) {
-        if (ev.target.closest('#drill-close')) return;
+        if (ev.target.closest('.drill-actions')) return;
         dragging = true;
         dragX = ev.clientX - drillPanel.offsetLeft;
         dragY = ev.clientY - drillPanel.offsetTop;
