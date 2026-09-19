@@ -170,6 +170,18 @@ Each is an ADR in [docs/design-decisions.md](docs/design-decisions.md).
 * **NCHRP Report 572; Kimber (TRL); Song et al. (2022)** — roundabout
   capacity & gap acceptance (deliberately approximated here).
 
+
+## Tools & thanks
+
+**AI disclosure.** Development was agent-assisted: Claude Code harness (model
+**GLM-5.3-flash**), plus **Pi Harness** and **AutoClaw Harness**. Every number in
+this writeup comes from simulator runs; in-code number gates reject unsupported
+claims.
+
+**Thanks** to the **OpenStreetMap contributors** (ODbL) for the real street
+networks, to **Featherless** (LLM API for explanations & the agent) and
+**ElevenLabs** (voice), and to the MunichTech EXPO team.
+
 ## 9. Run it & read more
 
 ```bash

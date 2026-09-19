@@ -177,6 +177,18 @@ Jedes davon ist ein ADR in [docs/design-decisions.md](docs/design-decisions.md).
 * **NCHRP Report 572; Kimber (TRL); Song et al. (2022)** — Kreisverkehr-
   Kapazität & Gap-Acceptance (bei uns bewusst nur Näherung).
 
+
+## Werkzeuge & Danke
+
+**AI-Disclosure.** Die Entwicklung erfolgte agentisch unterstützt: Claude-Code-Harness
+(Modell **GLM-5.3-flash**), daneben **Pi Harness** und **AutoClaw Harness**. Jede Zahl
+dieses Writeups stammt aus Simulator-Läufen; die Zahlengate im Code verwerfen
+nicht gedeckte Angaben.
+
+**Dank** an die **OpenStreetMap-Mitwirkenden** (ODbL) für die echten Straßennetze,
+an **Featherless** (LLM-API für Erklärungen & Agent) und **ElevenLabs** (Stimme)
+sowie an das MunichTech-EXPO-Team.
+
 ## 9. Ausführen & Weiterlesen
 
 ```bash

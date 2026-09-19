@@ -27,6 +27,7 @@ with zero runtime dependencies).
 | P0.4 | **Decide the licence** against the real rules (the `/rules` page was not fetchable here) — see [NOTICE.md](../NOTICE.md) | human | 15 min | licence + AI-disclosure wording confirmed |
 | P0.5 | **Verify repo is public/accessible to judges** (submission requires judge access) | human | 10 min | repo/demo link works for a stranger |
 | P0.6 | Fix any bug P0.3 finds (drawing/geometry/labels) | agent | 1–3 h | re-tested by human |
+| P0.7 | **Optional: live demo** — the stdlib server deploys anywhere Python runs (Render/Fly.io free tier, or a VPS + subdomain e.g. demo.kosit.de). Keys optional (offline fallback works); precompute cache before going live. Decide 2026-09-20 morning: live link lowers the voter barrier (voting starts 09:00) — but video + GitHub + writeup is sufficient per the rules | human + agent | 30–60 min | live URL reachable, or decision documented |
 
 ## P1 — high value, do if time remains before the deadline
 

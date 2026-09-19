@@ -21,7 +21,7 @@ Urban Mobility Track*. (Verified against the challenge page and its API.)
 |---|---|
 | **Measurable flow improvement in simulation** | Junction −24.5 % delay; district −49.7 % / −64.6 % delay, +16 % / +26 % throughput; all reproducible via seed |
 | **Realism of the approach** | Real OSM networks; saturation flow, clearance times, spillback, rush-hour demand, lossy detectors; parameters from traffic-engineering rules of thumb |
-| **Technical execution** | 48 passing tests; deterministic; graceful degradation; input validation; path-traversal guard |
+| **Technical execution** | 108 passing tests; deterministic; graceful degradation; input validation; path-traversal guard |
 | **Demo quality** | Animated junction + district maps, live decision log, natural-language + voice explanation, 2–3 min script |
 
 ## Format facts

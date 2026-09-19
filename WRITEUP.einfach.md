@@ -63,8 +63,11 @@ wir trotzdem. Nur so kann man dem Ergebnis vertrauen.
 ## Wer hat das gebaut?
 
 Ein kleines Team beim **MunichTech EXPO 2026** Hackathon. Mit Unterstützung
-von KI (Claude Code) — aber jede Zahl kommt aus echten Simulations-Läufen,
-und eine automatische Prüfung verwirft Antworten mit erfundenen Zahlen.
+von KI — gebaut im Claude-Code-Harness mit dem Modell **GLM-5.3-flash**,
+daneben Pi Harness und AutoClaw Harness. Aber jede Zahl kommt aus echten
+Simulations-Läufen, und eine automatische Prüfung verwirft Antworten mit
+erfundenen Zahlen. Danke an OpenStreetMap für die Straßen-Daten und an
+Featherless und ElevenLabs für ihre Technik.
 
 ## Weiterlesen
 

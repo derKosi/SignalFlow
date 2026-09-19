@@ -60,9 +60,12 @@ anyway. That is how the results stay trustworthy.
 
 ## Who built this?
 
-A small team at the **MunichTech EXPO 2026** hackathon, with help from AI
-(Claude Code) — but every number comes from real simulation runs, and an
-automatic check rejects any answer with made-up numbers.
+A small team at the **MunichTech EXPO 2026** hackathon, with help from AI —
+built with the Claude Code harness running the **GLM-5.3-flash** model, plus
+Pi Harness and AutoClaw Harness. But every number comes from real simulation
+runs, and an automatic check rejects any answer with made-up numbers. Thanks
+to OpenStreetMap for the street data and to Featherless and ElevenLabs for
+their technology.
 
 ## Read more
 

@@ -55,7 +55,24 @@
     border-radius:999px;padding:7px 14px;cursor:pointer}
   .vbtn:hover{color:var(--ink)}
   .vbtn.active{color:var(--acc2);border-color:var(--acc);background:var(--panel2)}
+  .vbtn.jury{color:#f5c451;border-color:#4a3d1e}
+  .vbtn.jury.active{color:#ffd77a;border-color:#f5c451;background:#241d0e}
   article.version{display:none} article.version.on{display:block}
+  /* Jury-Sonderfassung: rechts abgesetzt, eigener Rahmen */
+  article#v-jury{border:1px solid #4a3d1e;border-left:4px solid #f5c451;border-radius:14px;
+    padding:10px 26px 26px;margin-top:14px;background:linear-gradient(180deg,rgba(36,29,14,.35),transparent 240px)}
+  .sponsors{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:18px 0}
+  .sponsor{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
+  .sponsor h3{margin:0 0 6px}
+  .sponsor .where{font-size:13px;color:#cbd5e1}
+  .sponsor .award{display:inline-block;font-size:12px;color:#ffd77a;border:1px solid #4a3d1e;background:#241d0e;
+    padding:2px 9px;border-radius:999px;margin-top:8px}
+  .aistack{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
+  .aistack span{display:inline-block;font-size:13px;color:var(--ink);border:1px solid var(--line);
+    background:var(--panel2);border-radius:10px;padding:6px 12px}
+  .aistack span b{color:var(--acc2)}
+  figure.arch{margin:20px 0} figure.arch img{width:100%;border:1px solid var(--line);border-radius:12px;display:block}
+  figure.arch figcaption{color:var(--mut2);font-size:13px;margin-top:8px}
   .note{font-size:13px;color:var(--mut2)}
   .check{color:var(--ok)}
   .cross{color:var(--bad)}
@@ -79,6 +96,7 @@
     <button class="vbtn" data-v="de-simple" type="button">Deutsch · einfach</button>
     <button class="vbtn" data-v="en-full" type="button">English · detailed</button>
     <button class="vbtn" data-v="en-simple" type="button">English · simple</button>
+    <button class="vbtn jury" data-v="jury" type="button">★ Jury · Sponsoren · Architektur</button>
   </div>
 
   <!-- ================= Deutsch · ausführlich ================= -->
@@ -181,6 +199,10 @@
   zeigt die komplette Spur in der UI — Antworten kommen aus Läufen, nicht aus der Phantasie des
   Modells. Ein <b>Drei-Rollen-Selbstcheck</b> (Analyst → Kritiker → Writer) prüft jede Zahl gegen
   die Tool-Ergebnisse; die Anti-Halluzinations-Regel wird im Code durchgesetzt.</p>
+  <p class="note"><b>AI-Disclosure:</b> Die Entwicklung erfolgte agentisch unterstützt —
+  Claude-Code-Harness (Modell <b>GLM-5.3-flash</b>), daneben <b>Pi Harness</b> und
+  <b>AutoClaw Harness</b>. Dank an <b>OpenStreetMap</b> (ODbL), <b>Featherless</b> und
+  <b>ElevenLabs</b>.</p>
 
   <h2>6 · Die Engineering-Story</h2>
   <ol class="story">
@@ -292,9 +314,11 @@
   Nur so kann man dem Ergebnis vertrauen.</p>
 
   <h2>Wer hat das gebaut?</h2>
-  <p>Ein kleines Team beim MunichTech-EXPO-Hackathon, mit Unterstützung von KI (Claude Code) —
-  aber jede Zahl kommt aus echten Simulations-Läufen, und eine automatische Prüfung verwirft
-  Antworten mit erfundenen Zahlen.</p>
+  <p>Ein kleines Team beim MunichTech-EXPO-Hackathon, mit Unterstützung von KI — gebaut im
+  Claude-Code-Harness mit dem Modell <b>GLM-5.3-flash</b>, daneben Pi Harness und AutoClaw
+  Harness. Aber jede Zahl kommt aus echten Simulations-Läufen, und eine automatische Prüfung
+  verwirft Antworten mit erfundenen Zahlen. Danke an OpenStreetMap für die Straßen-Daten und
+  an Featherless und ElevenLabs für ihre Technik.</p>
 
   <h2> Weiterlesen</h2>
   <div class="links">
@@ -403,6 +427,9 @@
   the full trace in the UI — answers come from runs, not imagination. A <b>three-role self-check</b>
   (analyst → critic → writer) verifies every number against tool results; the anti-hallucination
   rule is enforced in code.</p>
+  <p class="note"><b>AI disclosure:</b> development was agent-assisted — Claude Code harness
+  (model <b>GLM-5.3-flash</b>), plus <b>Pi Harness</b> and <b>AutoClaw Harness</b>. Thanks to
+  <b>OpenStreetMap</b> (ODbL), <b>Featherless</b> and <b>ElevenLabs</b>.</p>
 
   <h2>6 · The engineering story</h2>
   <ol class="story">
@@ -514,15 +541,110 @@
   the results stay trustworthy.</p>
 
   <h2>Who built this?</h2>
-  <p>A small team at the MunichTech EXPO hackathon, with help from AI (Claude Code) — but every
-  number comes from real simulation runs, and an automatic check rejects any answer with made-up
-  numbers.</p>
+  <p>A small team at the MunichTech EXPO hackathon, with help from AI — built with the Claude
+  Code harness running the <b>GLM-5.3-flash</b> model, plus Pi Harness and AutoClaw Harness.
+  But every number comes from real simulation runs, and an automatic check rejects any answer
+  with made-up numbers. Thanks to OpenStreetMap for the street data and to Featherless and
+  ElevenLabs for their technology.</p>
 
   <h2>Read more</h2>
   <div class="links">
     <a href="https://github.com/derKosi/SignalFlow">GitHub: derKosi/SignalFlow<span>the whole project</span></a>
     <a href="WRITEUP.en.md">The long version<span>all details, tables and sources</span></a>
     <a href="https://github.com/derKosi/SignalFlow#readme">Try it yourself<span>how to start the demo</span></a>
+  </div>
+  </article>
+
+  <!-- ================= Jury · Sponsoren · Architektur ================= -->
+  <article class="version" id="v-jury" lang="de">
+  <h1>Für die Jury: Architektur, Sponsoren, Bewertungs-Mappe</h1>
+  <p class="lede">Die Compact-Fassung für Jurys und Voting — alles, was zählt, auf einer Seite.
+    <span class="pill">MunichTech EXPO 2026</span><span class="pill">Smart Cities: Adaptive Traffic Flow</span></p>
+
+  <h2>Architektur</h2>
+  <figure class="arch">
+    <img src="assets/architecture.png" alt="SignalFlow-Architektur: Nachfrage → Simulator (Junction + Netz) → Server/API → Dashboards → LLM/TTS" />
+    <figcaption>Datenfluss: Nachfrage (Modell oder Sensor-CSV) → identische Ankunftsreihe → zwei Controller
+    (Fixed / Max-Pressure) → stdlib-Server mit Cache → Browser-Dashboards; Featherless und ElevenLabs sitzen
+    als Erklär-/Stimm-Schicht <i>über</i> den Ergebnissen — jede Zahl bleibt Simulator-Output.</figcaption>
+  </figure>
+  <div class="cols">
+    <div class="panel">
+      <h3>Ein-Befehl-Stack</h3>
+      <p>Python 3.11+ <b>Standardlib only</b> (kein pip, kein Build) + Vanilla-JS-Frontend.
+      <code>python3 server.py</code> → <a href="http://127.0.0.1:8000">http://127.0.0.1:8000</a>.
+      Deterministisch über Seed, <b>108/108 Tests</b>, Datenträger-Cache macht die Demo instant.</p>
+    </div>
+    <div class="panel">
+      <h3>Reproduzierbarkeit</h3>
+      <p>Jede Zahl der Writeups/Tables ist über <code>python3 -m signalflow.simulation</code> bzw.
+      <code>tools/od_experiment.py</code> nachrechenbar; gleicher Seed für Fixed und Adaptiv —
+      der Vergleich ist fair per Konstruktion.</p>
+    </div>
+  </div>
+
+  <h2>Wo die Sponsor-Technologie eingesetzt wird</h2>
+  <div class="sponsors">
+    <div class="sponsor">
+      <h3>Featherless — LLM-API</h3>
+      <div class="where">
+      <b>/api/explain</b> macht das Decision-Log zu Prosa · <b>/api/agent</b> plant Tool-Aufrufe
+      (simulate, simulate_network, compare) gegen den echten Simulator · <b>Weekly Report</b>
+      schreibt die Zusammenfassung — mit Zahlengate im Code (halluzinierte Zahlen werden verworfen).
+      Ohne Key: deterministischer Offline-Erklärer.</div>
+      <span class="award">Kategorie „Best Project Built with Featherless” ($300)</span>
+    </div>
+    <div class="sponsor">
+      <h3>ElevenLabs — Sprachausgabe</h3>
+      <div class="where">
+      <b>/api/tts</b> liest Ergebnisse und Agent-Antworten vor („🔊 Ergebnis vorlesen”,
+      „🔊 Vorlesen”, Auto-Vorlesen nach jedem Lauf) — Stimme als
+      First-Class-Interface, nicht Anhängsel. Ohne Key: Text bleibt, Ton deaktiviert.</div>
+      <span class="award">Kategorie „Best Project Built with ElevenLabs” (bis 6 mo Scale)</span>
+    </div>
+    <div class="sponsor">
+      <h3>OpenStreetMap — Daten (ODbL)</h3>
+      <div class="where">
+      Alle sechs Stadtteilnetze sind <b>echte OSM-Graphen</b> (Nominatim → Overpass → Kompilierer);
+      weitere Orte lassen sich live in der App nachladen. Kartendaten ©
+      OpenStreetMap-Mitwirkende, ODbL 1.0 — Attribution steht in jeder Netzwerk-Ansicht.</div>
+      <span class="award">Realitätsnähe: echte Straßen, echte Topologie, echte Einbahnstraßen</span>
+    </div>
+  </div>
+
+  <h2>Bewertungskriterien → unsere Evidenz</h2>
+  <table>
+    <tr><th>Kriterium</th><th>Evidenz</th></tr>
+    <tr><td><b>Messbare Fluss-Verbesserung</b></td><td>Kreuzung −24,5 % Verzögerung; Stadtteile −61 bis −81 %; +12 bis +49 % mehr abgeschlossene Trips — alles seed-reproduzierbar</td></tr>
+    <tr><td><b>Realismus des Ansatzes</b></td><td>Echte OSM-Netze, Sättigungsfluss, Räumzeiten, Spillback, Tagesgänge, verlustbehaftete Detektoren (Dropout-Modell)</td></tr>
+    <tr><td><b>Technische Ausführung</b></td><td>108 Tests grün, 0 Dependencies, deterministisch, Path-Traversal-Guard, graceful degradation ohne Keys</td></tr>
+    <tr><td><b>Demo-Qualität</b></td><td>Animierte Kreuzung + Netzwerk-Karte, Knoten-Drilldown, Entscheidungs-Log, Chat mit Werkzeugspur, Stimme — 2–3-Minuten-Drehbuch (DEMO.md)</td></tr>
+    <tr><td><b>„Sensor/Camera Feed”</b></td><td>CSV-Zählfeed-Modus (Datei oder URL, Detektor-Dropout) — Herausforderungstext wörtlich erfüllt</td></tr>
+  </table>
+
+  <h2>AI-Stack — vollständige Disclosure</h2>
+  <div class="aistack">
+    <span>Agent-Harness: <b>Claude Code</b></span>
+    <span>Modell: <b>GLM-5.3-flash</b></span>
+    <span>Harness: <b>Pi Harness</b></span>
+    <span>Harness: <b>AutoClaw Harness</b></span>
+    <span>Regel: <b>jede Zahl aus Simulator-Läufen</b></span>
+  </div>
+  <p>Die Entwicklung erfolgte agentisch unterstützt (Claude-Code-Harness, angetrieben von
+  GLM-5.3-flash; daneben Pi Harness und AutoClaw Harness). Die Anti-Halluzinations-Haltung ist
+  nicht nur Prosa: der Agent-Modus prüft jede Zahl gegen die Tool-Ergebnisse, nicht
+  gedeckte Zahlen werden im Code verworfen — inklusive der Wochenbericht-Zusammenfassung.</p>
+
+  <h2>Danksagung</h2>
+  <p>Danke den <b>OpenStreetMap-Mitwirkenden</b> (ODbL) für die Straßennetze, <b>Featherless</b>
+  für die LLM-API, <b>ElevenLabs</b> für die Stimme — und dem MunichTech-EXPO-Team für die
+  Challenge. Fehler sind unsere; die Daten und Dienste machen das Projekt erst real.</p>
+
+  <div class="links">
+    <a href="https://github.com/derKosi/SignalFlow">GitHub: derKosi/SignalFlow<span>Repo · Code · Docs · Tests</span></a>
+    <a href="https://github.com/derKosi/SignalFlow/blob/main/docs/challenge.md">Challenge-Mappe<span>Kriterien &amp; Preise → Evidenz</span></a>
+    <a href="https://github.com/derKosi/SignalFlow/blob/main/docs/results.md">Ergebnisse<span>alle Zahlen &amp; Reproduktion</span></a>
+    <a href="https://github.com/derKosi/SignalFlow/blob/main/DEMO.md">Demo-Drehbuch<span>3 Minuten durch die App</span></a>
   </div>
   </article>
 
