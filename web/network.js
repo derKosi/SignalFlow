@@ -136,6 +136,30 @@
     const pick = regions.find(function (r) { return r.id === selectId; });
     sel.value = (pick || regions[0]).id;
     state.regionMeta = pick || regions[0];
+    const filter = $('region-filter');
+    if (filter) filter.value = '';
+    applyRegionFilter('');
+  }
+
+  // Filter für die Gebietsliste (die Liste wächst per „Ort hinzufügen”)
+  function applyRegionFilter(q) {
+    const sel = $('ctl-region');
+    if (!sel) return;
+    const needle = (q || '').toLowerCase().trim();
+    let visible = 0, firstVisible = null;
+    [...sel.options].forEach(function (o) {
+      const match = !needle || o.textContent.toLowerCase().indexOf(needle) >= 0
+        || o.value.toLowerCase().indexOf(needle) >= 0;
+      o.hidden = !match;
+      if (match) { visible++; if (!firstVisible) firstVisible = o; }
+    });
+    if (visible && sel.selectedOptions[0] && sel.selectedOptions[0].hidden) {
+      sel.value = firstVisible.value;
+      state.regionMeta = state.regions.find(function (r) { return r.id === sel.value; })
+        || { id: sel.value };
+      renderStats();
+      runSimulation();
+    }
   }
 
   // ---- "Ort hinzufügen": geocode + OSM fetch + build, live ---------------
@@ -1165,6 +1189,10 @@
       state.regionMeta = state.regions.find(function (r) { return r.id === id; }) || { id: id };
       renderStats();
       runSimulation();
+    });
+    const regionFilter = $('region-filter');
+    if (regionFilter) regionFilter.addEventListener('input', function (e) {
+      applyRegionFilter(e.target.value);
     });
 
     const run = $('btn-run');

@@ -43,6 +43,14 @@ with zero runtime dependencies).
 
 ## P2 — after the hackathon
 
+* **Time- and day-dependent control** (the "von–bis" research hook): first
+  step built as UI automation (junction dashboard time window → scenario +
+  load). Real research questions: stochastic time-series arrivals in the
+  district model (today fully deterministic/flow-based — the seed only
+  affects the junction model, now disclosed), per-junction strategy choice
+  over the day with switching hysteresis (our sweep hints: adaptive at rush,
+  green wave on weekend arterials, tuned plans off-peak), calibration on real
+  count series. Signal timers are the easy part.
 * **Network → junction drilldown**: *built* — clicking a signalised node on the
   district map opens a junction close-up (true bearings, link queues, real
   phase colours, synced to playback). Possible upgrades: per-node KPIs and

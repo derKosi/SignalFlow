@@ -51,22 +51,6 @@ def _cache_key(path: str, payload: dict) -> str:
     return h[:24]
 
 
-def disk_get(key: str):
-    f = CACHE_DIR / (key + ".json")
-    if f.is_file():
-        try:
-            return json.loads(f.read_text(encoding="utf-8"))
-        except (ValueError, OSError):
-            return None
-    return None
-
-
-def disk_put(key: str, value: dict) -> None:
-    try:
-        CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        (CACHE_DIR / (key + ".json")).write_text(json.dumps(value), encoding="utf-8")
-    except OSError:
-        pass
 HOST = os.environ.get("SIGNALFLOW_HOST", "127.0.0.1")
 PORT = int(os.environ.get("SIGNALFLOW_PORT", "8000"))
 
@@ -92,18 +76,52 @@ CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
 CACHE_MAX = 24
 
 
+# Small result cache so repeated demo clicks (same config) return instantly.
+# ThreadingHTTPServer serves each request on its own thread: the shared
+# OrderedDict and the disk cache are guarded, and heavy simulations are
+# serialised so 3–5 concurrent clients queue instead of corrupting state.
+import threading  # noqa: E402
+
+CACHE_LOCK = threading.Lock()
+SIM_LOCK = threading.Lock()
+
+
 def cache_get(key):
-    if key in CACHE:
-        CACHE.move_to_end(key)
-        return CACHE[key]
+    with CACHE_LOCK:
+        if key in CACHE:
+            CACHE.move_to_end(key)
+            return CACHE[key]
     return None
 
 
 def cache_put(key, value):
-    CACHE[key] = value
-    CACHE.move_to_end(key)
-    while len(CACHE) > CACHE_MAX:
-        CACHE.popitem(last=False)
+    with CACHE_LOCK:
+        CACHE[key] = value
+        CACHE.move_to_end(key)
+        while len(CACHE) > CACHE_MAX:
+            CACHE.popitem(last=False)
+
+
+def disk_get(key: str):
+    with CACHE_LOCK:
+        f = CACHE_DIR / (key + ".json")
+        if f.is_file():
+            try:
+                return json.loads(f.read_text(encoding="utf-8"))
+            except (ValueError, OSError):
+                return None
+    return None
+
+
+def disk_put(key: str, value: dict) -> None:
+    try:
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        tmp = CACHE_DIR / (key + ".json.tmp")
+        tmp.write_text(json.dumps(value), encoding="utf-8")
+        with CACHE_LOCK:
+            tmp.replace(CACHE_DIR / (key + ".json"))
+    except OSError:
+        pass
 
 
 def _agent_context(ctx) -> tuple:
@@ -242,7 +260,8 @@ class Handler(BaseHTTPRequestHandler):
                 key = _cache_key(path, cfg)
                 result = cache_get(key) or disk_get(key)
                 if result is None:
-                    result = run_scenario(cfg)
+                    with SIM_LOCK:
+                        result = run_scenario(cfg)
                     disk_put(key, result)
                 cache_put(key, result)
                 LAST = result
@@ -255,18 +274,20 @@ class Handler(BaseHTTPRequestHandler):
                 key = _cache_key(path + "|" + str(region), body)
                 result = cache_get(key) or disk_get(key)
                 if result is None:
-                    result = run_region(region, body)
+                    with SIM_LOCK:
+                        result = run_region(region, body)
                     disk_put(key, result)
                 cache_put(key, result)
                 LAST_NETWORK = result
                 self._json(200, result)
             elif path == "/api/regions_add":
                 body = self._read_json()
-                info = add_region(
-                    query=body.get("query"), bbox=body.get("bbox"),
-                    name=body.get("name"),
-                    span_deg=float(body.get("span_deg") or 0.015),
-                    region_id=body.get("region_id"))
+                with SIM_LOCK:
+                    info = add_region(
+                        query=body.get("query"), bbox=body.get("bbox"),
+                        name=body.get("name"),
+                        span_deg=float(body.get("span_deg") or 0.015),
+                        region_id=body.get("region_id"))
                 self._json(200, {"region": info, "regions": list_regions()})
             elif path == "/api/explain":
                 body = self._read_json()

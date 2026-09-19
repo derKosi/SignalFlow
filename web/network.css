@@ -64,6 +64,10 @@
   margin-bottom:16px;
 }
 .region-control{ flex:1 1 320px; min-width:240px; }
+#region-filter{
+  grid-column:1 / -1; margin-top:2px; padding:6px 9px; border-radius:8px;
+  border:1px solid #243244; background:#0d1626; color:var(--ink,#e2e8f0); font-size:12.5px;
+}
 
 .net-stats{ display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; flex:2 1 360px; }
 .stat{

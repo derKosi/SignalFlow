@@ -146,6 +146,9 @@ Jedes davon ist ein ADR in [docs/design-decisions.md](docs/design-decisions.md).
 * Der OD-*Generator* bleibt synthetisch (Gravitation); die OD-*Schätzung* aus
   Zählungen ist implementiert (Tuned\*).
 * Fuß- und Radverkehr sind nicht modelliert.
+* Das Gebietsmodell ist vollständig deterministisch (flussbasiert, ohne
+  stochastische Ankünfte) — der Seed wirkt nur im Kreuzungsmodell;
+  stochastische Netz-Ankünfte sind Folgearbeit.
 
 ## Datenbasis — was echt ist und was Annahme
 
@@ -159,6 +162,20 @@ Für eine Simulation ist jede dieser Annahmen ordnungsgemäß — wir legen sie 
 | Sättigungsfluss & PCE | **Regelwert** | 1 800 Fz/h/Spur (HCM-Größenordnung 1 900), unkalibrierte PCE-Tabelle; auch real ±8–10 % (Tarko et al.) |
 | Sensor-Feed | **Synthetik** | Briefing-Datensatz nicht öffentlich → Stand-in gleicher Form; Adapter für echte Exporte (`arrival_csv`) |
 | Vergleiche | **fair** | identischer Seed und Ankünfte — Unterschiede entstehen nur durch die Steuerung |
+
+## Ausblick — Zeit-, tag- und verkehrsabhängige Steuerung
+
+Erster Schritt gebaut: das **Tageszeit-Fenster** im Kreuzungs-Dashboard wählt
+Szenario und Last automatisch (Mo–Fr Stoßzeit → Berufsverkehr, Wochenende
+Mittag → Freizeit-Hügel, nachts weniger, Ferien ≈ −30 %). Die eigentliche
+Forschungsfrage dahinter: eine Steuerung, die nicht nur auf *Verkehr*, sondern
+auch auf **Zeit und Tag** reagiert — Our Sweep-Ergebnisse legen nahe: Adaptiv
+gewinnt zur Rush, die Grüne Welle am Wochenend-Arterial, getunte Pläne in
+schwächeren Randzeiten. Offene Fragen: stochastische Zeitreihen-Ankünfte im
+Gebietsmodell (heute flussbasiert-deterministisch), tagesganggetriebene
+Strategie-Wahl pro Knoten mit Umschalt-Hysterese, und Kalibrierung an echte
+Zähldatenreihen. Die Timer in den Ampeln sind technisch das geringste Problem —
+die Steuerungslogik ist der Forschungsgegenstand.
 
 ## 8. Literatur
 

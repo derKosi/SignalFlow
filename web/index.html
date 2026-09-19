@@ -126,6 +126,22 @@
       </div>
     </div>
 
+    <div class="control time-control">
+      <label for="ctl-time-from" title="Tageszeit-Fenster: wählt Szenario und Last automatisch (Berufsverkehr zu Stoßzeiten, Wochenend-Mittagshügel, nachts weniger, Ferien −30 %) — manuelle Auswahl bleibt möglich">Tageszeit (optional)</label>
+      <div class="time-row">
+        <select id="ctl-dow" aria-label="Wochentag">
+          <option value="wd">Mo–Fr</option>
+          <option value="sa">Sa</option>
+          <option value="so">So</option>
+        </select>
+        <input id="ctl-time-from" type="time" value="07:30" aria-label="von" />
+        <span class="time-sep">–</span>
+        <input id="ctl-time-to" type="time" value="08:30" aria-label="bis" />
+        <label class="time-hol" title="≈ −30 % Nachfrage"><input id="ctl-holiday" type="checkbox" /> Fer.</label>
+      </div>
+      <span id="time-hint" class="time-hint"></span>
+    </div>
+
     <div class="control">
       <label for="ctl-source">Datenquelle</label>
       <select id="ctl-source">

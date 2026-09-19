@@ -1413,9 +1413,65 @@
     apply(t);
   }
 
+  // Tageszeit-Fenster: wählt Szenario + Last automatisch (Mo–Fr Stoßzeiten =
+  // Berufsverkehr, Wochenende Mittagshügel = Freizeit, nachts weniger, Ferien −30 %).
+  // Manuelle Auswahl bleibt möglich — das Fenster überschreibt nur bei Änderung.
+  function applyTimeWindow() {
+    const dow = $('ctl-dow').value;
+    const fromS = $('ctl-time-from').value || '07:30';
+    const toS = $('ctl-time-to').value || '08:30';
+    const holiday = $('ctl-holiday').checked;
+    const min = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
+    const a = min(fromS), b = Math.max(min(toS), min(toS) + (min(toS) <= a ? 24 * 60 : 0));
+    const mid = (a + b) / 2;
+    const overlaps = (s, e) => a < e && b > s;
+    let scen = 'normal', mult = 1.0, tag = '';
+    if (dow === 'wd') {
+      if (overlaps(360, 540) || overlaps(930, 1110)) { scen = 'berufsverkehr'; tag = 'Stoßzeit'; }
+      else if (mid >= 1320 || mid < 360) { mult = 0.5; tag = 'Nacht'; }
+      else { mult = 0.9; tag = 'Tagesverkehr'; }
+    } else {
+      scen = 'freizeit';
+      if (mid >= 600 && mid <= 960) { tag = 'Mittagshügel'; }
+      else { mult = 0.7; tag = 'Randzeit'; }
+    }
+    if (holiday) { mult *= 0.7; tag += ' · Ferien'; }
+    mult = clamp(Math.round(mult * 100) / 100, 0.5, 1.4);
+
+    const scenSel = $('ctl-scenario');
+    if (scenSel) {
+      scenSel.value = scen;
+      scenSel.dispatchEvent(new Event('change', { bubbles: true }));
+      document.querySelectorAll('.preset').forEach((p) =>
+        p.classList.toggle('active', p.dataset.scenario === scen));
+    }
+    const load = $('ctl-load');
+    if (load) {
+      load.value = String(mult);
+      load.dispatchEvent(new Event('input', { bubbles: true }));
+    }
+    const hint = $('time-hint');
+    if (hint) {
+      const labels = { normal: 'Normal', berufsverkehr: 'Berufsverkehr', ferien: 'Ferien', freizeit: 'Freizeit' };
+      hint.textContent = (dow === 'wd' ? 'Mo–Fr' : (dow === 'sa' ? 'Sa' : 'So')) + ' ' +
+        fromS + '–' + toS + ' → ' + (labels[scen] || scen) + ' · Last ×' +
+        mult.toFixed(2).replace('.', ',') + (tag ? ' (' + tag + ')' : '');
+    }
+    runSimulation();
+  }
+
+  function initTimeWindow() {
+    const ids = ['ctl-dow', 'ctl-time-from', 'ctl-time-to', 'ctl-holiday'];
+    ids.forEach((id) => {
+      const el = $(id);
+      if (el) el.addEventListener('change', applyTimeWindow);
+    });
+  }
+
   function bindEvents() {
     initKpiView();
     initTheme();
+    initTimeWindow();
     $('btn-simulate').addEventListener('click', runSimulation);
 
     $('btn-play').addEventListener('click', () => {

@@ -66,6 +66,7 @@
       <div class="control region-control">
         <label for="ctl-region">Gebiet</label>
         <select id="ctl-region" aria-label="Region"></select>
+        <input id="region-filter" type="text" placeholder="Liste filtern …" aria-label="Gebiete filtern" title="Filtert die Gebietsliste — nützlich, sobald per „Ort hinzufügen“ mehr Einträge entstehen" />
       </div>
       <div class="control add-region">
         <label for="add-place">Ort hinzufügen (OpenStreetMap)</label>
@@ -119,7 +120,7 @@
       </div>
 
       <div class="control">
-        <label for="ctl-seed">Seed</label>
+        <label for="ctl-seed" title="Wirkt aktuell nur im Kreuzungsmodell — das Gebietsmodell ist flussbasiert und vollständig deterministisch (gleiche Parameter → gleiche Ergebnisse)">Seed</label>
         <input id="ctl-seed" type="range" min="1" max="999" step="1" value="42" />
         <output id="val-seed" for="ctl-seed">42</output>
       </div>
@@ -252,7 +253,7 @@
 
   <footer class="foot">
     <span id="meta-info">Bereit.</span>
-    <span class="foot-note">Datenquelle: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende (ODbL) · Modell: Link-Queue-Näherung (mesoskopisch, dt = 1 s) · deterministisch über Seed</span>
+    <span class="foot-note">Datenquelle: © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>-Mitwirkende (ODbL) · Modell: Link-Queue-Näherung (mesoskopisch, dt = 1 s) · deterministisch — flussbasiert ohne Zufallsanteil; der Seed wirkt nur im Kreuzungsmodell</span>
   </footer>
 </main>
 

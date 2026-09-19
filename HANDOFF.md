@@ -52,12 +52,21 @@ context): the junction page sends `{kind:'junction'}`, the network page sends it
 on-screen region — `/api/explain` accepts a client `result`, `/api/agent` a
 `context` hint (server keeps `LAST` / `LAST_NETWORK` separate so the pages never
 flip each other's context). Layout: sticky ask column on the right. KPIs render
-as a transposed matrix table (policies × metrics, traffic-light deltas
-green/orange/red) with a cards ⇄ table toggle. Dark/light theme via the 🌙/☀️
+as a grouped matrix table (per metric: Wert | Δ vs. Fixed, strategy row colours,
+best value bold) with a cards ⇄ table toggle. Dark/light theme via the 🌙/☀️
 topbar button (`body[data-theme]`, persisted). The junction canvas draws
 Pkw/Van/Lkw/Bus by the run's `vehicle_mix` and routes roundabout traffic through
-the ring. On the network map, clicking a signalised node opens a junction
-drilldown overlay (true arm bearings north-up, link queues, phase colours).
+the ring. On the network map, clicking a signalised node opens a draggable
+junction drilldown overlay (true arm bearings north-up, OSM street names, link
+queues, phase colours, size toggle 400/640 px). Viewer modes: Fixed | Adaptive |
+Koord. | Beide (links Fixed, rechts Adaptive). Junction dashboard has a
+time-of-day window (von–bis + weekday + Ferien) that auto-selects scenario and
+load. Region list is filterable. Server: cache + disk guarded by `CACHE_LOCK`,
+heavy sims serialised via `SIM_LOCK` (5 concurrent clients verified: queueing,
+no corruption). Known+disclosed: the district model is fully deterministic
+(no RNG — seed only affects the junction sim). New architecture diagram:
+`docs/architecture-diagram.html` (+ .svg/.png; spec `architecture.archify.json`).
+Regions: 9 incl. live-added `hennef_sieg`.
 
 ## 3. Repo map
 

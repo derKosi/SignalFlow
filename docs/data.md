@@ -95,6 +95,7 @@ with retry/backoff. `overpass-api.de` returned 406 from this environment.
 | `hamburg_innenstadt` | Hamburg (Jungfernstieg) | 53.544, 9.982, 53.561, 10.012 | 1136 | 1431 | 173 | 71 |
 | `koeln_innenstadt` | Köln (Dom & Deutz) | 50.928, 6.944, 50.946, 6.982 | 1442 | 1647 | 102 | 49 |
 | `heidelberg_uni` | Heidelberg (Altstadt/Uni) | 49.404, 8.678, 49.421, 8.718 | 609 | 799 | 81 | 19 |
+| `hennef_sieg` | Hennef (Sieg) — live-added 2026-09-19 | 50.760, 7.270, 50.790, 7.300 | 181 | 326 | 45 | — |
 
 City regions use an **arterial scope** (motorway…tertiary + links, no residential)
 to keep large inner-city extracts tractable and realistic for signal coordination.

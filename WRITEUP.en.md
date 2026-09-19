@@ -141,6 +141,9 @@ Each is an ADR in [docs/design-decisions.md](docs/design-decisions.md).
 * The OD *generator* stays synthetic (gravity); OD *estimation* from counts
   is implemented (Tuned\*).
 * Pedestrians and cyclists are not modelled.
+* The district model is fully deterministic (flow-based, no stochastic
+  arrivals) — the seed only affects the junction model; stochastic
+  network arrivals are follow-up work.
 
 ## Data basis — what is real and what is assumption
 
@@ -154,6 +157,19 @@ Every one of these assumptions is proper for a simulation — we state them open
 | Saturation flow & PCE | **rule of thumb** | 1 800 veh/h/lane (HCM ballpark 1 900), uncalibrated PCE table; ±8–10 % even in practice (Tarko et al.) |
 | Sensor feed | **synthetic** | briefing dataset not public → same-shape stand-in; adapter for real exports (`arrival_csv`) |
 | Comparisons | **fair** | identical seed and arrivals — differences come only from the control policy |
+
+## Outlook — time-, day- and traffic-dependent control
+
+First step built: the **time-of-day window** in the junction dashboard picks
+scenario and load automatically (weekday peak → rush hour, weekend noon →
+leisure hump, less at night, holidays ≈ −30 %). The research question behind
+it: control that reacts not only to *traffic* but to **time and day of week** —
+our sweep suggests adaptive wins at rush, the green wave on weekend arterials,
+tuned plans in quiet off-peak. Open questions: stochastic time-series arrivals
+in the district model (today flow-based deterministic), per-junction
+strategy selection over the day with switching hysteresis, and calibration
+against real count series. The signal timers are the easy part — the control
+logic is the research object.
 
 ## 8. References
 
