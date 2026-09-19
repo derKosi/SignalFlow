@@ -64,11 +64,16 @@
 
   // KPI definitions: mapping to summary fields, direction & formatting
   const KPI_META = [
-    { key: 'delay', title: 'Ø Verzögerung', unit: 's', dir: 'down', dec: 1, get: (s) => s.avg_delay_s },
-    { key: 'throughput', title: 'Durchsatz', unit: 'veh/h', dir: 'up', dec: 0, get: (s) => s.throughput_vph },
-    { key: 'maxq', title: 'max. Warteschlange', unit: '', dir: 'down', dec: 1, get: (s) => s.max_queue },
-    { key: 'co2', title: 'CO₂-Proxy', unit: 'g', dir: 'down', dec: 0, get: (s) => s.co2_g },
-    { key: 'wasted', title: 'Leerlauf-Grün', unit: 's', dir: 'down', dec: 0, get: (s) => s.wasted_green_s },
+    { key: 'delay', title: 'Ø Verzögerung', unit: 's', dir: 'down', dec: 1, get: (s) => s.avg_delay_s,
+      info: 'Mittlere Verzögerung je Fahrzeug (Sekunden) — Wartezeit vor Rot plus Anfahrverluste. Weniger ist besser.' },
+    { key: 'throughput', title: 'Durchsatz', unit: 'veh/h', dir: 'up', dec: 0, get: (s) => s.throughput_vph,
+      info: 'Fahrzeuge pro Stunde, die den Knoten passieren. Mehr ist besser.' },
+    { key: 'maxq', title: 'max. Warteschlange', unit: '', dir: 'down', dec: 1, get: (s) => s.max_queue,
+      info: 'Längste Fahrzeugschlange einer Zufahrt während des Laufs (Fahrzeuge). Weniger ist besser.' },
+    { key: 'co2', title: 'CO₂-Proxy', unit: 'g', dir: 'down', dec: 0, get: (s) => s.co2_g,
+      info: 'Geschätzter CO₂-Ausstoß aus Stand- und Verzögerungszeiten (Gramm) — aus Leerlauf-Zeiten hochgerechnet, keine Messung. Weniger ist besser.' },
+    { key: 'wasted', title: 'Leerlauf-Grün', unit: 's', dir: 'down', dec: 0, get: (s) => s.wasted_green_s,
+      info: 'Grünzeit in Sekunden, in der keine Fahrzeuge mehr warten — reine Verschwendung. Weniger ist besser.' },
   ];
 
   const COL = {
@@ -338,7 +343,7 @@
       const card = document.createElement('article');
       card.className = 'kpi';
       card.innerHTML = `
-        <header><h3>${m.title}</h3><span class="unit">${m.unit}</span></header>
+        <header><h3 title="${m.info}">${m.title}</h3><span class="unit">${m.unit}</span></header>
         <div class="kpi-rows">
           <div class="row fixed"><span class="tag" title="${POLICY_INFO.fixed}">${refL}</span><b data-kpi="${m.key}-fixed">–</b></div>
           <div class="row adaptive"><span class="tag" title="${POLICY_INFO.adaptive}">${altL}</span><b data-kpi="${m.key}-adaptive">–</b></div>
@@ -363,7 +368,7 @@
     const refL = jl.reference_label || 'Fixed';
     const altL = jl.alternative_label || 'Adaptive';
     const head = KPI_META.map((m) =>
-      `<th>${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
+      `<th title="${m.info}">${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
     const fixedCells = KPI_META.map((m) =>
       `<td class="v" data-kpi="${m.key}-fixed">–</td>`).join('');
     const adaptiveCells = KPI_META.map((m) =>
@@ -405,6 +410,12 @@
       const av = m.get(state.summaryAdaptive);
       all(m.key + '-fixed').forEach((el) => { el.textContent = fmt(fv, m.dec); });
       all(m.key + '-adaptive').forEach((el) => { el.textContent = fmt(av, m.dec); });
+
+      // winner per metric: bold the better value (direction-aware, ties bold both)
+      const betterAdaptive = m.dir === 'up' ? av > fv : av < fv;
+      const tie = av === fv;
+      all(m.key + '-fixed').forEach((el) => el.classList.toggle('best', tie || !betterAdaptive));
+      all(m.key + '-adaptive').forEach((el) => el.classList.toggle('best', tie || betterAdaptive));
 
       all(m.key + '-delta').forEach((dEl) => {
         dEl.classList.remove('good', 'bad', 'neutral');

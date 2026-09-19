@@ -183,18 +183,20 @@ select{
 .kpi .row b{ font-family:var(--mono); font-size:16px; font-weight:600; }
 .kpi .row.fixed b{ color:#aab6c4; }
 .kpi .row.adaptive b{ color:var(--accent); }
-.kpi .delta{
-  margin-top:auto; align-self:flex-start;
+/* delta pills: base styling is context-free so table and cards look identical */
+.delta{
   font-family:var(--mono); font-size:12.5px; font-weight:600;
   padding:2px 8px; border-radius:999px; border:1px solid var(--line);
+  display:inline-block;
 }
+.kpi .delta{ margin-top:auto; align-self:flex-start; }
 /* cards with several badges (network: adaptive + green wave) keep them in one row */
 .kpi .deltas{ display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; }
 .kpi .deltas .delta{ margin-top:0; }
-.kpi .delta.good{ color:var(--good); border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
-.kpi .delta.bad{ color:var(--bad); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.08); }
-.kpi .delta.neutral{ color:var(--muted); }
-.kpi .delta.mid{ color:var(--yellow); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); }
+.delta.good{ color:var(--good); border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
+.delta.bad{ color:var(--bad); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.08); }
+.delta.neutral{ color:var(--muted); }
+.delta.mid{ color:var(--yellow); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); }
 
 /* ------------- KPI panel: cards ⇄ compact matrix table ----------------- */
 .kpi-panel{ }
@@ -222,6 +224,9 @@ table.kpi-table tbody th.pol-adaptive{ color:var(--accent); }
 table.kpi-table td.v{ font-family:var(--mono); font-size:13.5px; }
 table.kpi-table td.v.adaptive-v{ color:var(--accent); }
 table.kpi-table td.d{ white-space:nowrap; }
+/* Gewinner je Kennzahl: fettester Wert der Spalte (Tabelle + Karten) */
+table.kpi-table .best{ font-weight:700; }
+.kpi .row b.best{ font-weight:800; text-shadow:0 0 12px rgba(45,212,191,.35); }
 
 /* ------------------------------ viewer ------------------------------ */
 .viewer{ padding-bottom:14px; }

@@ -747,12 +747,18 @@
 
   /* -------------------------------- KPIs --------------------------------- */
   const KPI_META = [
-    { title: 'Ø Verzögerung', unit: 's', dir: 'down', dec: 1, get: function (s) { return s.avg_delay_s; } },
-    { title: 'Durchsatz', unit: 'veh/h', dir: 'up', dec: 0, get: function (s) { return s.throughput_vph; } },
-    { title: 'Ø Reisezeit', unit: 's', dir: 'down', dec: 1, get: function (s) { return s.avg_travel_time_s; } },
-    { title: 'CO₂-Proxy', unit: 'g', dir: 'down', dec: 0, get: function (s) { return s.co2_g; } },
-    { title: 'Trips abgeschl.', unit: '', dir: 'up', dec: 0, get: function (s) { return s.served; } },
-    { title: 'Korridor Ø-Verzög.', unit: 's', dir: 'down', dec: 1, get: function (s) { return s.corridor_delay_s; } },
+    { title: 'Ø Verzögerung', unit: 's', dir: 'down', dec: 1, get: function (s) { return s.avg_delay_s; },
+      info: 'Mittlere Verzögerung je Fahrzeug im ganzen Gebiet (Sekunden) — Wartezeit vor Rot plus Anfahrverluste. Weniger ist besser.' },
+    { title: 'Durchsatz', unit: 'veh/h', dir: 'up', dec: 0, get: function (s) { return s.throughput_vph; },
+      info: 'Fahrzeuge pro Stunde, die das Gebiet passieren. Mehr ist besser.' },
+    { title: 'Ø Reisezeit', unit: 's', dir: 'down', dec: 1, get: function (s) { return s.avg_travel_time_s; },
+      info: 'Mittlere Gesamtreisezeit je Trip von Einfahrt bis Ausfahrt (Sekunden). Weniger ist besser.' },
+    { title: 'CO₂-Proxy', unit: 'g', dir: 'down', dec: 0, get: function (s) { return s.co2_g; },
+      info: 'Geschätzter CO₂-Ausstoß aus Stand- und Verzögerungszeiten (Gramm) — aus Leerlauf-Zeiten hochgerechnet, keine Messung. Weniger ist besser.' },
+    { title: 'Trips abgeschl.', unit: '', dir: 'up', dec: 0, get: function (s) { return s.served; },
+      info: 'Im Simulationszeitraum abgeschlossene Fahrten. Mehr ist besser.' },
+    { title: 'Korridor Ø-Verzög.', unit: 's', dir: 'down', dec: 1, get: function (s) { return s.corridor_delay_s; },
+      info: 'Verzögerung nur entlang des stärksten Korridors (Referenzstrecke der grünen Welle, Sekunden). Weniger ist besser.' },
   ];
 
   function deltaPct(fx, ad, dir) {
@@ -772,9 +778,22 @@
       fixed: 'Fester Signalplan mit vordefinierten Grünzeiten — reagiert nicht auf den live Verkehr (Baseline)',
       adaptive: 'SignalFlow: Phasenlängen reagieren live auf den Warteschlangen-Druck jeder Richtung (Max-Pressure)',
       coordinated: 'Grüne Welle: feste Versatz-Offsets zwischen benachbarten Ampeln entlang des Korridors',
-      tuned: 'Fester Plan, getunt aus Detektor-Zählungen (OD-Schätzung) statt echter Nachfrage — fairere Baseline ohne Oracle-Wissen',
+      tuned: 'Fester Plan, getunt aus Detektor-Zählungen (OD-Schätzung) statt echter Nachfrage — fairere Baseline ohne Oracle-Wissen. Je nach Netz schlägt sie Adaptive (kurzmaschige Grids wie Berlin/Hamburg) oder verliert (z. B. Riem/Köln) — siehe docs/results.md.',
     };
     const clsFor = function (d) { return d > 5 ? 'good' : (d < -5 ? 'bad' : 'mid'); };
+    // Gewinner je Kennzahl: bester Wert über alle Richtungen (Richtung beachtet)
+    const winnerOf = function (m) {
+      const cand = [[m.get(fx), 'fixed'], [m.get(ad), 'adaptive']];
+      if (co && m.get(co) != null) cand.push([m.get(co), 'coordinated']);
+      if (te && m.get(te) != null) cand.push([m.get(te), 'tuned']);
+      let best = null;
+      cand.forEach(function (c) {
+        if (c[0] == null) return;
+        if (best == null) { best = c; return; }
+        if (m.dir === 'up' ? c[0] > best[0] : c[0] < best[0]) best = c;
+      });
+      return best ? best[1] : null;
+    };
     let html = '';
     KPI_META.forEach(function (m) {
       const fv = m.get(fx), av = m.get(ad);
@@ -792,11 +811,18 @@
       if (te && m.get(te) != null) {
         teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span><b>' + fmt(m.get(te), m.dec) + '</b></div>';
       }
+      const win = winnerOf(m);
+      if (co && m.get(co) != null) {
+        coRow = '<div class="row coordinated"><span class="tag" title="' + POLICY_INFO.coordinated + '">Koord.</span><b class="' + (win === 'coordinated' ? 'best' : '') + '">' + fmt(m.get(co), m.dec) + '</b></div>';
+      }
+      if (te && m.get(te) != null) {
+        teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span><b class="' + (win === 'tuned' ? 'best' : '') + '">' + fmt(m.get(te), m.dec) + '</b></div>';
+      }
       html += '<div class="kpi">' +
-        '<header><h3>' + m.title + '</h3><span class="unit">' + (m.unit || '') + '</span></header>' +
+        '<header><h3 title="' + m.info + '">' + m.title + '</h3><span class="unit">' + (m.unit || '') + '</span></header>' +
         '<div class="kpi-rows">' +
-        '<div class="row fixed"><span class="tag" title="' + POLICY_INFO.fixed + '">Fixed</span><b>' + fmt(fv, m.dec) + '</b></div>' +
-        '<div class="row adaptive"><span class="tag" title="' + POLICY_INFO.adaptive + '">Adaptiv</span><b>' + fmt(av, m.dec) + '</b></div>' +
+        '<div class="row fixed"><span class="tag" title="' + POLICY_INFO.fixed + '">Fixed</span><b class="' + (win === 'fixed' ? 'best' : '') + '">' + fmt(fv, m.dec) + '</b></div>' +
+        '<div class="row adaptive"><span class="tag" title="' + POLICY_INFO.adaptive + '">Adaptiv</span><b class="' + (win === 'adaptive' ? 'best' : '') + '">' + fmt(av, m.dec) + '</b></div>' +
         coRow +
         teRow +
         '</div>' +
@@ -806,30 +832,31 @@
     grid.innerHTML = html;
     if (tableWrap) {
       // transposed matrix: policies as rows, metrics as columns,
-      // traffic-light deltas (green/orange/red) under the values
+      // traffic-light deltas (green/orange/red) under the values,
+      // winner per column bold
       const headCells = KPI_META.map(function (m) {
-        return '<th>' + m.title + (m.unit ? ' <span class="unit">' + m.unit + '</span>' : '') + '</th>';
+        return '<th title="' + m.info + '">' + m.title + (m.unit ? ' <span class="unit">' + m.unit + '</span>' : '') + '</th>';
       }).join('');
       const fixedCells = KPI_META.map(function (m) {
-        return '<td class="v">' + fmt(m.get(fx), m.dec) + '</td>';
+        return '<td class="v' + (winnerOf(m) === 'fixed' ? ' best' : '') + '">' + fmt(m.get(fx), m.dec) + '</td>';
       }).join('');
       const adaptiveCells = KPI_META.map(function (m) {
         const d = deltaPct(m.get(fx), m.get(ad), m.dir);
-        return '<td class="v adaptive-v">' + fmt(m.get(ad), m.dec) +
+        return '<td class="v adaptive-v' + (winnerOf(m) === 'adaptive' ? ' best' : '') + '">' + fmt(m.get(ad), m.dec) +
           '<br><span class="delta ' + clsFor(d) + '">' + (d > 0 ? '+' : '') + fmt(d, 1) + ' %</span></td>';
       }).join('');
       let extraRows = '';
       if (co) {
         extraRows += '<tr><th class="pol" title="' + POLICY_INFO.coordinated + '">Koord.</th>' + KPI_META.map(function (m) {
           const d2 = deltaPct(m.get(fx), m.get(co), m.dir);
-          return '<td class="v">' + fmt(m.get(co), m.dec) +
+          return '<td class="v' + (winnerOf(m) === 'coordinated' ? ' best' : '') + '">' + fmt(m.get(co), m.dec) +
             '<br><span class="delta coordinated ' + clsFor(d2) + '">Welle ' + (d2 > 0 ? '+' : '') + fmt(d2, 1) + ' %</span></td>';
         }).join('') + '</tr>';
       }
       if (te) {
         extraRows += '<tr><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned*</th>' +
           KPI_META.map(function (m) {
-            return '<td class="v">' + fmt(m.get(te), m.dec) + '</td>';
+            return '<td class="v' + (winnerOf(m) === 'tuned' ? ' best' : '') + '">' + fmt(m.get(te), m.dec) + '</td>';
           }).join('') + '</tr>';
       }
       tableWrap.innerHTML = '<table class="kpi-table"><thead><tr><th></th>' + headCells + '</tr></thead><tbody>' +

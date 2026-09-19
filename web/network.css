@@ -47,7 +47,12 @@
 .run-hint{ font-size:12.5px; color:#f5c451; margin-left:10px; align-self:center; }
 .btn.dirty{ box-shadow:0 0 0 2px rgba(245,196,81,.55); }
 .kpi .row.coordinated b{ color:#f5c451; }
-.kpi .delta.coordinated{ color:#f5c451; border-color:rgba(245,196,81,.35); background:rgba(245,196,81,.08); }
+/* "Welle"-Badges: gestrichelter Rand als Marker — die Ampelfarbe
+   (grün/orange/rot) bleibt erhalten und ist konsistent zu allen anderen Deltas */
+.delta.coordinated{ border-style:dashed; border-color:rgba(245,196,81,.55); }
+.delta.coordinated.good{ color:var(--good); border-color:rgba(34,197,94,.4); }
+.delta.coordinated.mid{ color:var(--yellow); }
+.delta.coordinated.bad{ color:var(--bad); border-color:rgba(239,68,68,.4); }
 .kpi .row.tuned-est b{ color:#7fd1a8; }
 .kpi .tag[title]{ cursor:help; }
 .region-row{
