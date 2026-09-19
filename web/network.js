@@ -492,11 +492,11 @@
     const titleMain = $('cell-main-title');
     if (state.mode === 'both') {
       wrap.classList.add('dual');
-      if (titleMain) titleMain.textContent = 'Adaptive';
+      if (titleMain) titleMain.textContent = 'Fixed';      // links Fixed, rechts Adaptive
       const titleAlt = $('cell-alt-title');
-      if (titleAlt) titleAlt.textContent = 'Fixed';
-      drawNetwork(cMain, 'adaptive');
-      drawNetwork($('canvas-alt'), 'fixed');
+      if (titleAlt) titleAlt.textContent = 'Adaptive';
+      drawNetwork(cMain, 'fixed');
+      drawNetwork($('canvas-alt'), 'adaptive');
     } else {
       wrap.classList.remove('dual');
       if (titleMain) titleMain.textContent = state.mode === 'fixed' ? 'Fixed-Time' : 'Adaptive';
@@ -505,10 +505,10 @@
 
     // Readouts
     const tEl = $('playhead-t');
-    if (tEl) tEl.textContent = timeStr(state.t);
+    if (tEl) tEl.textContent = 't ' + timeStr(state.t) + ' / ' + timeStr(state.steps);
     const qEl = $('playhead-q');
     if (qEl) {
-      const arr = state.series.adaptive || [];
+      const arr = state.series[state.mode === 'fixed' ? 'fixed' : 'adaptive'] || [];
       const idx = state.steps ? clamp(Math.round(state.t / Math.max(1, state.frameDt)), 0, arr.length - 1) : 0;
       qEl.textContent = arr.length ? fmt(arr[idx] || 0, 0) + ' veh' : '–';
     }
@@ -666,6 +666,7 @@
       const lanes = Math.min(3, Math.max(1, Math.round(arm.lanes)));
       const pitch = carLen * 1.35;
       const n = Math.min(80, Math.round(q));
+      const vehColor = queueColor(q);               // gleiche Farbskala wie die Karte
       for (let i = 0; i < n; i++) {
         const lane = i % lanes, pos = Math.floor(i / lanes);
         const dist = R + 7 + carLen / 2 + pos * pitch;
@@ -675,7 +676,7 @@
         ctx.save();
         ctx.translate(vx, vy);
         ctx.rotate(ang);
-        ctx.fillStyle = '#9fb0c0';
+        ctx.fillStyle = vehColor;
         ctx.globalAlpha = 0.95;
         rrLocal(ctx, -carLen / 2, -carW / 2, carLen, carW, 2);
         ctx.fill();
@@ -781,6 +782,13 @@
       tuned: 'Fester Plan, getunt aus Detektor-Zählungen (OD-Schätzung) statt echter Nachfrage — fairere Baseline ohne Oracle-Wissen. Je nach Netz schlägt sie Adaptive (kurzmaschige Grids wie Berlin/Hamburg) oder verliert (z. B. Riem/Köln) — siehe docs/results.md.',
     };
     const clsFor = function (d) { return d > 5 ? 'good' : (d < -5 ? 'bad' : 'mid'); };
+    // Δ gegenüber Fixed-Time als schlichte Zahl (kein Pill), positiv = besser
+    const dltOf = function (m, val, base) {
+      if (base == null || !base || val == null) return '';
+      const dd = deltaPct(base, val, m.dir);
+      return '<i class="dlt ' + clsFor(dd) + '" title="Δ gegenüber Fixed-Time — positiv = besser">'
+        + (dd > 0 ? '+' : '') + fmt(dd, 1) + ' %</i>';
+    };
     // Gewinner je Kennzahl: bester Wert über alle Richtungen (Richtung beachtet)
     const winnerOf = function (m) {
       const cand = [[m.get(fx), 'fixed'], [m.get(ad), 'adaptive']];
@@ -812,21 +820,24 @@
         teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span><b>' + fmt(m.get(te), m.dec) + '</b></div>';
       }
       const win = winnerOf(m);
+      const val = (v, isWin, dltHtml) =>
+        '<span class="val"><b class="' + (isWin ? 'best' : '') + '">' + v + '</b>' + dltHtml + '</span>';
       if (co && m.get(co) != null) {
-        coRow = '<div class="row coordinated"><span class="tag" title="' + POLICY_INFO.coordinated + '">Koord.</span><b class="' + (win === 'coordinated' ? 'best' : '') + '">' + fmt(m.get(co), m.dec) + '</b></div>';
+        coRow = '<div class="row coordinated"><span class="tag" title="' + POLICY_INFO.coordinated + '">Koord.</span>' +
+          val(fmt(m.get(co), m.dec), win === 'coordinated', dltOf(m, m.get(co), fv)) + '</div>';
       }
       if (te && m.get(te) != null) {
-        teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span><b class="' + (win === 'tuned' ? 'best' : '') + '">' + fmt(m.get(te), m.dec) + '</b></div>';
+        teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span>' +
+          val(fmt(m.get(te), m.dec), win === 'tuned', dltOf(m, m.get(te), fv)) + '</div>';
       }
       html += '<div class="kpi">' +
         '<header><h3 title="' + m.info + '">' + m.title + '</h3><span class="unit">' + (m.unit || '') + '</span></header>' +
         '<div class="kpi-rows">' +
-        '<div class="row fixed"><span class="tag" title="' + POLICY_INFO.fixed + '">Fixed</span><b class="' + (win === 'fixed' ? 'best' : '') + '">' + fmt(fv, m.dec) + '</b></div>' +
-        '<div class="row adaptive"><span class="tag" title="' + POLICY_INFO.adaptive + '">Adaptiv</span><b class="' + (win === 'adaptive' ? 'best' : '') + '">' + fmt(av, m.dec) + '</b></div>' +
+        '<div class="row fixed"><span class="tag" title="' + POLICY_INFO.fixed + '">Fixed</span>' + val(fmt(fv, m.dec), win === 'fixed', '') + '</div>' +
+        '<div class="row adaptive"><span class="tag" title="' + POLICY_INFO.adaptive + '">Adaptiv</span>' + val(fmt(av, m.dec), win === 'adaptive', dltOf(m, av, fv)) + '</div>' +
         coRow +
         teRow +
         '</div>' +
-        '<div class="deltas"><span class="delta ' + cls + '">' + sign + fmt(d, 1) + ' %</span>' + coDelta + '</div>' +
         '</div>';
     });
     grid.innerHTML = html;
@@ -841,27 +852,26 @@
         return '<td class="v' + (winnerOf(m) === 'fixed' ? ' best' : '') + '">' + fmt(m.get(fx), m.dec) + '</td>';
       }).join('');
       const adaptiveCells = KPI_META.map(function (m) {
-        const d = deltaPct(m.get(fx), m.get(ad), m.dir);
-        return '<td class="v adaptive-v' + (winnerOf(m) === 'adaptive' ? ' best' : '') + '">' + fmt(m.get(ad), m.dec) +
-          '<br><span class="delta ' + clsFor(d) + '">' + (d > 0 ? '+' : '') + fmt(d, 1) + ' %</span></td>';
+        return '<td class="v' + (winnerOf(m) === 'adaptive' ? ' best' : '') + '">' + fmt(m.get(ad), m.dec) +
+          '<br>' + dltOf(m, m.get(ad), m.get(fx)) + '</td>';
       }).join('');
       let extraRows = '';
       if (co) {
-        extraRows += '<tr><th class="pol" title="' + POLICY_INFO.coordinated + '">Koord.</th>' + KPI_META.map(function (m) {
-          const d2 = deltaPct(m.get(fx), m.get(co), m.dir);
+        extraRows += '<tr class="pol-coordinated"><th class="pol" title="' + POLICY_INFO.coordinated + '">Koord.</th>' + KPI_META.map(function (m) {
           return '<td class="v' + (winnerOf(m) === 'coordinated' ? ' best' : '') + '">' + fmt(m.get(co), m.dec) +
-            '<br><span class="delta coordinated ' + clsFor(d2) + '">Welle ' + (d2 > 0 ? '+' : '') + fmt(d2, 1) + ' %</span></td>';
+            '<br>' + dltOf(m, m.get(co), m.get(fx)) + '</td>';
         }).join('') + '</tr>';
       }
       if (te) {
-        extraRows += '<tr><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned*</th>' +
+        extraRows += '<tr class="pol-tuned"><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned*</th>' +
           KPI_META.map(function (m) {
-            return '<td class="v' + (winnerOf(m) === 'tuned' ? ' best' : '') + '">' + fmt(m.get(te), m.dec) + '</td>';
+            return '<td class="v' + (winnerOf(m) === 'tuned' ? ' best' : '') + '">' + fmt(m.get(te), m.dec) +
+              '<br>' + dltOf(m, m.get(te), m.get(fx)) + '</td>';
           }).join('') + '</tr>';
       }
       tableWrap.innerHTML = '<table class="kpi-table"><thead><tr><th></th>' + headCells + '</tr></thead><tbody>' +
-        '<tr><th class="pol" title="' + POLICY_INFO.fixed + '">Fixed</th>' + fixedCells + '</tr>' +
-        '<tr><th class="pol pol-adaptive" title="' + POLICY_INFO.adaptive + '">Adaptiv</th>' + adaptiveCells + '</tr>' +
+        '<tr class="pol-fixed"><th class="pol" title="' + POLICY_INFO.fixed + '">Fixed</th>' + fixedCells + '</tr>' +
+        '<tr class="pol-adaptive"><th class="pol" title="' + POLICY_INFO.adaptive + '">Adaptiv</th>' + adaptiveCells + '</tr>' +
         extraRows + '</tbody></table>';
     }
   }

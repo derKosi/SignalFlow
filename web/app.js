@@ -345,10 +345,9 @@
       card.innerHTML = `
         <header><h3 title="${m.info}">${m.title}</h3><span class="unit">${m.unit}</span></header>
         <div class="kpi-rows">
-          <div class="row fixed"><span class="tag" title="${POLICY_INFO.fixed}">${refL}</span><b data-kpi="${m.key}-fixed">–</b></div>
-          <div class="row adaptive"><span class="tag" title="${POLICY_INFO.adaptive}">${altL}</span><b data-kpi="${m.key}-adaptive">–</b></div>
-        </div>
-        <div class="delta neutral" data-kpi="${m.key}-delta">–</div>`;
+          <div class="row fixed"><span class="tag" title="${POLICY_INFO.fixed}">${refL}</span><span class="val"><b data-kpi="${m.key}-fixed">–</b></span></div>
+          <div class="row adaptive"><span class="tag" title="${POLICY_INFO.adaptive}">${altL}</span><span class="val"><b data-kpi="${m.key}-adaptive">–</b><i class="dlt neutral" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i></span></div>
+        </div>`;
       grid.appendChild(card);
     }
   }
@@ -373,12 +372,12 @@
       `<td class="v" data-kpi="${m.key}-fixed">–</td>`).join('');
     const adaptiveCells = KPI_META.map((m) =>
       `<td class="v adaptive-v"><span data-kpi="${m.key}-adaptive">–</span>` +
-      `<br><span class="delta neutral" data-kpi="${m.key}-delta">–</span></td>`).join('');
+      `<br><i class="dlt neutral" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i></td>`).join('');
     wrap.innerHTML = `<table class="kpi-table">
       <thead><tr><th></th>${head}</tr></thead>
       <tbody>
-        <tr><th class="pol" title="${POLICY_INFO.fixed}">${refL}</th>${fixedCells}</tr>
-        <tr><th class="pol pol-adaptive" title="${POLICY_INFO.adaptive}">${altL}</th>${adaptiveCells}</tr>
+        <tr class="pol-fixed"><th class="pol" title="${POLICY_INFO.fixed}">${refL}</th>${fixedCells}</tr>
+        <tr class="pol-adaptive"><th class="pol" title="${POLICY_INFO.adaptive}">${altL}</th>${adaptiveCells}</tr>
       </tbody>
     </table>`;
   }
@@ -903,7 +902,7 @@
     if (frames && frames.length) {
       const f = frames[frameIndex(frames)];
       $('playhead-phase').textContent = PHASE_LABEL[f.phase] || f.phase || '–';
-      $('playhead-t').textContent = Number(state.t).toFixed(1) + 's';
+      $('playhead-t').textContent = 't ' + timeStr(state.t) + ' / ' + timeStr(state.duration);
       const qel = $('playhead-queue');
       if (qel) {
         let tot = 0;

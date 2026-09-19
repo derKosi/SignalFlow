@@ -80,7 +80,7 @@
 
     <div class="net-controls">
       <div class="control">
-        <label for="ctl-duration">Dauer (min)</label>
+        <label for="ctl-duration" title="Länge des simulierten Durchgangs (5–60 min) — kein Tageszeitbezug: das Szenario (z. B. Berufsverkehr) skaliert die Nachfrage über die Laufzeit">Dauer (min)</label>
         <input id="ctl-duration" type="range" min="5" max="60" step="1" value="15" />
         <output id="val-duration" for="ctl-duration">15</output>
       </div>
@@ -172,8 +172,8 @@
       </div>
 
       <div class="readouts">
-        <span class="pill"><span class="k">Netzlast</span> <b id="playhead-q" class="mono">–</b></span>
-        <span class="pill mono"><span class="k">t</span> <b id="playhead-t">00:00</b></span>
+        <span class="pill" title="Summe aller Warteschlangen im Netz (wartende Fahrzeuge) — nicht die Zahl aller Fahrzeuge; im Modus „Beide“ wird Adaptive gezeigt"><span class="k">Netzlast</span> <b id="playhead-q" class="mono">–</b></span>
+        <span class="pill mono" title="Simulierte Laufzeit im laufenden Durchgang (mm:ss) — kein Tageszeitbezug"><span class="k">t</span> <b id="playhead-t">00:00</b></span>
       </div>
     </div>
 
@@ -212,7 +212,7 @@
     </div>
     <div class="panel chart-panel">
       <h2>Netzlast über die Zeit</h2>
-      <p class="panel-sub">Summe der Warteschlangen je Frame (veh) — Fixed vs. Adaptive</p>
+      <p class="panel-sub">Summe der Warteschlangen je Frame (veh) — simulierte Laufzeit, keine Uhrzeit · Fixed vs. Adaptive</p>
       <canvas id="chart-load"></canvas>
     </div>
   </section>

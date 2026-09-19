@@ -224,6 +224,22 @@ table.kpi-table tbody th.pol-adaptive{ color:var(--accent); }
 table.kpi-table td.v{ font-family:var(--mono); font-size:13.5px; }
 table.kpi-table td.v.adaptive-v{ color:var(--accent); }
 table.kpi-table td.d{ white-space:nowrap; }
+/* Strategie-Wertfarben — identisch zur Kartenansicht */
+table.kpi-table tr.pol-fixed td.v{ color:#aab6c4; }
+table.kpi-table tr.pol-adaptive td.v{ color:var(--accent); }
+/* Koord./Tuned-Zeilen (nur Netzwerk) */
+table.kpi-table tr.pol-coordinated td.v{ color:#f5c451; }
+table.kpi-table tr.pol-tuned td.v{ color:#7fd1a8; }
+/* Δ gegenüber Fixed-Time: schlichte kleine Zahl statt Pill */
+.dlt{
+  font-style:normal; font-family:var(--mono); font-size:11px;
+  color:var(--muted); white-space:nowrap;
+}
+.dlt.good{ color:var(--good); }
+.dlt.mid{ color:var(--yellow); }
+.dlt.bad{ color:var(--bad); }
+/* Karten: Wert + Δ übereinander rechtsbündig */
+.kpi .val{ display:flex; flex-direction:column; align-items:flex-end; line-height:1.3; }
 /* Gewinner je Kennzahl: fettester Wert der Spalte (Tabelle + Karten) */
 table.kpi-table .best{ font-weight:700; }
 .kpi .row b.best{ font-weight:800; text-shadow:0 0 12px rgba(45,212,191,.35); }
