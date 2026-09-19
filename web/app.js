@@ -125,6 +125,20 @@
     const m = Math.floor(s / 60);
     return String(m).padStart(2, '0') + ':' + String(s % 60).padStart(2, '0');
   }
+  // PNG export via Blob/object-URL — data:-URLs break past ~2 MB (dual view, retina)
+  function exportCanvas(id, filename) {
+    const cv = document.getElementById(id);
+    if (!cv) return;
+    cv.toBlob((blob) => {
+      if (!blob) return;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }, 'image/png');
+  }
 
   /* ===========================================================================
    * 4) DATA LAYER
@@ -197,8 +211,8 @@
     if (mix) {
       cfg.vehicle_mix = {
         car: { car: 1.0 },
-        city: { car: 0.86, van: 0.06, truck: 0.06, bus: 0.02 },
-        truck: { car: 0.72, van: 0.06, truck: 0.20, bus: 0.02 },
+        city: { car: 0.80, van: 0.08, truck: 0.08, bus: 0.04 },
+        truck: { car: 0.64, van: 0.06, truck: 0.24, bus: 0.06 },
       }[mix.value] || { car: 1.0 };
     }
     const tsp = document.getElementById('ctl-tsp');
@@ -265,11 +279,12 @@
 
     renderKPIs();
     buildKpiCards();
+    buildKpiTable();
     renderKPIs();
     renderCharts();
     renderDecisions();
     renderMeta(usedDemo);
-    if (state.autoSpeak) speakResult();
+    if (state.autoSpeak && window.SFAsk) SFAsk.speakResult();
     // auto-ask? no. keep user driven.
   }
 
@@ -325,35 +340,86 @@
       card.innerHTML = `
         <header><h3>${m.title}</h3><span class="unit">${m.unit}</span></header>
         <div class="kpi-rows">
-          <div class="row fixed"><span class="tag">${refL}</span><b id="kpi-${m.key}-fixed">–</b></div>
-          <div class="row adaptive"><span class="tag">${altL}</span><b id="kpi-${m.key}-adaptive">–</b></div>
+          <div class="row fixed"><span class="tag" title="${POLICY_INFO.fixed}">${refL}</span><b data-kpi="${m.key}-fixed">–</b></div>
+          <div class="row adaptive"><span class="tag" title="${POLICY_INFO.adaptive}">${altL}</span><b data-kpi="${m.key}-adaptive">–</b></div>
         </div>
-        <div class="delta neutral" id="kpi-${m.key}-delta">–</div>`;
+        <div class="delta neutral" data-kpi="${m.key}-delta">–</div>`;
       grid.appendChild(card);
     }
   }
 
+  // Compact matrix alternative to the cards: policies as rows, metrics as
+  // columns, traffic-light deltas (green/orange/red) under the adaptive
+  // values. Both views share the data-kpi hooks, so renderKPIs updates
+  // whichever is visible.
+  const POLICY_INFO = {
+    fixed: 'Fester Signalplan mit vordefinierten Grünzeiten — reagiert nicht auf den live Verkehr (Baseline)',
+    adaptive: 'SignalFlow: Phasenlängen reagieren live auf den Warteschlangen-Druck jeder Richtung (Max-Pressure)',
+  };
+  function buildKpiTable() {
+    const wrap = $('kpi-table-wrap');
+    if (!wrap) return;
+    const jl = state.junction || {};
+    const refL = jl.reference_label || 'Fixed';
+    const altL = jl.alternative_label || 'Adaptive';
+    const head = KPI_META.map((m) =>
+      `<th>${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
+    const fixedCells = KPI_META.map((m) =>
+      `<td class="v" data-kpi="${m.key}-fixed">–</td>`).join('');
+    const adaptiveCells = KPI_META.map((m) =>
+      `<td class="v adaptive-v"><span data-kpi="${m.key}-adaptive">–</span>` +
+      `<br><span class="delta neutral" data-kpi="${m.key}-delta">–</span></td>`).join('');
+    wrap.innerHTML = `<table class="kpi-table">
+      <thead><tr><th></th>${head}</tr></thead>
+      <tbody>
+        <tr><th class="pol" title="${POLICY_INFO.fixed}">${refL}</th>${fixedCells}</tr>
+        <tr><th class="pol pol-adaptive" title="${POLICY_INFO.adaptive}">${altL}</th>${adaptiveCells}</tr>
+      </tbody>
+    </table>`;
+  }
+
+  // cards ⇄ table toggle (persisted; table is the default)
+  function initKpiView() {
+    const grid = $('kpi-grid'), wrap = $('kpi-table-wrap');
+    if (!grid || !wrap) return;
+    const apply = (view) => {
+      grid.hidden = view !== 'cards';
+      wrap.hidden = view !== 'table';
+      document.querySelectorAll('.kpi-view-btn').forEach((b) =>
+        b.classList.toggle('active', b.dataset.view === view));
+      try { localStorage.setItem('sf-kpi-view', view); } catch (_) {}
+    };
+    let view = 'table';
+    try { view = localStorage.getItem('sf-kpi-view') || 'table'; } catch (_) {}
+    if (view !== 'cards' && view !== 'table') view = 'table';
+    document.querySelectorAll('.kpi-view-btn').forEach((b) =>
+      b.addEventListener('click', () => apply(b.dataset.view)));
+    apply(view);
+  }
+
   function renderKPIs() {
     if (!state.summaryFixed || !state.summaryAdaptive) return;
+    const all = (name) => document.querySelectorAll('[data-kpi="' + name + '"]');
     for (const m of KPI_META) {
       const fv = m.get(state.summaryFixed);
       const av = m.get(state.summaryAdaptive);
-      $('kpi-' + m.key + '-fixed').textContent = fmt(fv, m.dec);
-      $('kpi-' + m.key + '-adaptive').textContent = fmt(av, m.dec);
+      all(m.key + '-fixed').forEach((el) => { el.textContent = fmt(fv, m.dec); });
+      all(m.key + '-adaptive').forEach((el) => { el.textContent = fmt(av, m.dec); });
 
-      const dEl = $('kpi-' + m.key + '-delta');
-      dEl.classList.remove('good', 'bad', 'neutral');
-      if (!fv) {
-        dEl.textContent = 'n/a';
-        dEl.classList.add('neutral');
-        continue;
-      }
-      // signed improvement: > 0 always means "better than Fixed-Time"
-      const pct = m.dir === 'up' ? (av - fv) / fv * 100 : (fv - av) / fv * 100;
-      const arrow = (av - fv) < 0 ? '▼' : ((av - fv) > 0 ? '▲' : '＝');
-      dEl.textContent = `${arrow} ${Math.abs(pct).toFixed(1)}%`;
-      dEl.classList.add(pct > 0.05 ? 'good' : (pct < -0.05 ? 'bad' : 'neutral'));
-      dEl.title = pct >= 0 ? 'Verbesserung gegenüber Fixed-Time' : 'Verschlechterung gegenüber Fixed-Time';
+      all(m.key + '-delta').forEach((dEl) => {
+        dEl.classList.remove('good', 'bad', 'neutral');
+        if (!fv) {
+          dEl.textContent = 'n/a';
+          dEl.classList.add('neutral');
+          return;
+        }
+        // signed improvement: > 0 always means "better than Fixed-Time"
+        const pct = m.dir === 'up' ? (av - fv) / fv * 100 : (fv - av) / fv * 100;
+        const arrow = (av - fv) < 0 ? '▼' : ((av - fv) > 0 ? '▲' : '＝');
+        dEl.textContent = `${arrow} ${fmt(Math.abs(pct), 1)} %`;
+        dEl.classList.add(pct > 5 ? 'good' : (pct < -5 ? 'bad' : 'mid'));
+        dEl.title = pct >= 0 ? 'Verbesserung gegenüber Fixed-Time' : 'Verschlechterung gegenüber Fixed-Time';
+      });
     }
   }
 
@@ -472,7 +538,7 @@
         const qb = (frameB.q && frameB.q[key]) || 0;
         const q = qa + (qb - qa) * frac;          // smooth queue growth/shrink
         const offsets = (bands[turn] || [0]).map(function (v) { return sgn * v; });
-        drawQueue(ctx, g, a, turn, q, offsets);
+        drawQueue(ctx, g, a, turn, q, offsets, bands.eff);
       }
     }
 
@@ -484,26 +550,40 @@
         if ((frame.t - (state.crossSpawn[key] || -999)) >= state.frameDt && state.crossing.length < 80) {
           state.crossSpawn[key] = frame.t;
           const parts = key.split('-');
-          state.crossing.push({ a: parts[0], turn: parts[1], p: 0 });
+          state.crossing.push({ a: parts[0], turn: parts[1], p: 0,
+                                kind: vehicleKind(key, Math.round(frame.t * 3)) });
         }
       }
     }
     for (const c of state.crossing) drawCrossing(ctx, g, c, bands);
 
     // --- labels & center readout ---
+    // compass letters sit beside the road, not on the lane markings
     ctx.fillStyle = '#5d6b7a'; ctx.font = '600 12px ' + FONT;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText('N', g.cx, 14);
-    ctx.fillText('S', g.cx, h - 14);
-    ctx.fillText('W', 14, g.cy);
-    ctx.fillText('O', w - 14, g.cy);
+    ctx.fillText('N', g.cx - g.roadHalf - 18, 14);
+    ctx.fillText('S', g.cx - g.roadHalf - 18, h - 14);
+    ctx.fillText('W', 14, g.cy - g.roadHalf - 18);
+    ctx.fillText('O', w - 14, g.cy - g.roadHalf - 18);
 
+    // phase readout on a chip so crossing vehicles stay readable
+    const phText = PHASE_LABEL[frame.phase] || frame.phase || '';
+    const tText = 't = ' + Math.round(frame.t) + 's';
+    ctx.font = '600 11px ' + FONT;
+    const rw = Math.max(ctx.measureText(phText).width, ctx.measureText(tText).width);
+    ctx.font = '10px ' + FONT;
+    const chipW = rw + 20, chipH = 34;
+    const chipX = g.cx, chipY = g.cy + g.roadHalf * 0.55 + 7;
+    ctx.fillStyle = 'rgba(9,13,18,.78)';
+    ctx.strokeStyle = '#223040'; ctx.lineWidth = 1;
+    rr(ctx, chipX - chipW / 2, chipY - chipH / 2, chipW, chipH, 8);
+    ctx.fill(); ctx.stroke();
     ctx.fillStyle = 'rgba(45,212,191,.85)';
     ctx.font = '600 11px ' + FONT;
-    ctx.fillText(PHASE_LABEL[frame.phase] || frame.phase || '', g.cx, g.cy + g.roadHalf * 0.55);
+    ctx.fillText(phText, chipX, chipY - 7);
     ctx.fillStyle = 'rgba(139,152,167,.9)';
     ctx.font = '10px ' + FONT;
-    ctx.fillText('t = ' + Math.round(frame.t) + 's', g.cx, g.cy + g.roadHalf * 0.55 + 15);
+    ctx.fillText(tText, chipX, chipY + 8);
     void label;
   }
 
@@ -540,10 +620,10 @@
     const thick = 9;
     let x, y, w, h;
     // the head sits over the approach's incoming (right-hand) half of the road
-    if (a === 'N') { w = g.roadHalf; h = thick; x = g.cx - g.roadHalf; y = g.cy - g.roadHalf - 9 - thick / 2; }
-    else if (a === 'S') { w = g.roadHalf; h = thick; x = g.cx; y = g.cy + g.roadHalf + 9 - thick / 2; }
-    else if (a === 'E') { w = thick; h = g.roadHalf; x = g.cx + g.roadHalf + 9 - thick / 2; y = g.cy - g.roadHalf; }
-    else { w = thick; h = g.roadHalf; x = g.cx - g.roadHalf - 9 - thick / 2; y = g.cy; }
+    if (a === 'N') { w = g.roadHalf; h = thick; x = g.cx - g.roadHalf; y = g.cy - g.roadHalf - 13 - thick / 2; }
+    else if (a === 'S') { w = g.roadHalf; h = thick; x = g.cx; y = g.cy + g.roadHalf + 13 - thick / 2; }
+    else if (a === 'E') { w = thick; h = g.roadHalf; x = g.cx + g.roadHalf + 13 - thick / 2; y = g.cy - g.roadHalf; }
+    else { w = thick; h = g.roadHalf; x = g.cx - g.roadHalf - 13 - thick / 2; y = g.cy; }
     ctx.save();
     ctx.shadowColor = c; ctx.shadowBlur = 14;
     ctx.fillStyle = c;
@@ -551,40 +631,104 @@
     ctx.restore();
   }
 
-  function drawQueue(ctx, g, a, turn, q, offsets) {
+  /* -------------------- vehicle types (Pkw / Van / Lkw / Bus) -------------
+   * Queue counts are aggregate vehicles, so the *configured* mix of the run
+   * decides which slot shows which type — deterministic per (movement, index)
+   * so the picture is stable across frames. Turn direction stays the colour;
+   * the type changes size and silhouette. */
+  const VEH = {
+    car:   { len: 1.0,  wid: 1.0 },
+    van:   { len: 1.22, wid: 1.08 },
+    truck: { len: 1.85, wid: 1.14 },
+    bus:   { len: 2.05, wid: 1.12 },
+  };
+  function vehicleMix() {
+    const m = (state.result && state.result.config && state.result.config.vehicle_mix)
+      || (state.baseConfig && state.baseConfig.vehicle_mix) || { car: 1 };
+    return Object.keys(m).filter((k) => m[k] > 0).map((k) => [k, m[k]])
+      .sort((x, y) => y[1] - x[1]);
+  }
+  function hash01(key, i) {
+    let h = 2166136261 ^ Math.imul(i + 1, 374761393);
+    for (let k = 0; k < key.length; k++) { h ^= key.charCodeAt(k); h = Math.imul(h, 16777619); }
+    return ((h >>> 0) % 10000) / 10000;
+  }
+  function vehicleKind(key, i) {
+    const mix = vehicleMix();
+    if (mix.length < 2) return mix[0] ? mix[0][0] : 'car';
+    const x = hash01(key, i);
+    let acc = 0;
+    for (const [kind, share] of mix) { acc += share; if (x < acc) return kind; }
+    return mix[mix.length - 1][0];
+  }
+  // Body along the travel axis (x after translate/rotate); wid across.
+  function drawVehicleBody(ctx, kind, len, wid) {
+    const v = VEH[kind] || VEH.car;
+    const L = len * v.len, W = wid * v.wid;
+    rr(ctx, -L / 2, -W / 2, L, W, Math.min(L, W) * 0.26);
+    ctx.fill();
+    if (kind !== 'car') {                        // heavier traffic pops a bit
+      ctx.strokeStyle = 'rgba(9,13,18,.55)';
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+    }
+    ctx.save();
+    if (kind === 'truck') {
+      ctx.fillStyle = 'rgba(9,13,18,.4)';                 // cab / box gap
+      ctx.fillRect(L * 0.14, -W / 2 + 1, 2.5, W - 2);
+      ctx.fillStyle = 'rgba(230,237,243,.5)';             // cab window
+      ctx.fillRect(L / 2 - 3.5, -W / 2 + 1.5, 2, W - 3);
+    } else if (kind === 'bus') {
+      ctx.fillStyle = 'rgba(230,237,243,.38)';            // roof stripes
+      ctx.fillRect(-L * 0.32, -W / 2 + 1.5, L * 0.64, 2);
+      ctx.fillRect(-L * 0.32, W / 2 - 3.5, L * 0.64, 2);
+    } else if (kind === 'van') {
+      ctx.fillStyle = 'rgba(230,237,243,.35)';            // windscreen
+      ctx.fillRect(L / 2 - 3, -W / 2 + 1.5, 2, W - 3);
+    }
+    ctx.restore();
+  }
+
+  function drawQueue(ctx, g, a, turn, q, offsets, laneEff) {
     const count = Math.round(q);
     if (count <= 0) return;
     const nLanes = Math.max(1, offsets.length);
     const color = COL[turn];
     const vertical = (a === 'N' || a === 'S');
     const roadHalf = g.roadHalf, carLen = g.carLen, carGap = g.carGap, pitch = g.pitch;
-    const carW = vertical ? g.laneW * 0.78 : carLen;
-    const carH = vertical ? carLen : g.laneW * 0.78;
+    const bodyW = (laneEff || g.laneW) * 0.78; // lane pitch, not nominal laneW
+    const extra = new Array(nLanes).fill(0);   // extra length longer vehicles add
 
     for (let i = 0; i < count; i++) {
       const laneIdx = i % nLanes;
       const pos = Math.floor(i / nLanes);
       if (pos >= g.maxPerLane) break;
+      const kind = vehicleKind(a + '-' + turn + laneIdx, i);
+      const vlen = carLen * ((VEH[kind] || VEH.car).len);
       const off = offsets[laneIdx];          // signed lateral offset (right-hand side)
-      let x, y;
+      let cx0, cy0;
       if (vertical) {
         const sx = g.cx + off;
         const yBase = a === 'N'
-          ? g.cy - roadHalf - carGap - carLen / 2 - pos * pitch
-          : g.cy + roadHalf + carGap + carLen / 2 + pos * pitch;
-        x = sx - carW / 2; y = yBase - carH / 2;
+          ? g.cy - roadHalf - carGap - vlen / 2 - pos * pitch - extra[laneIdx]
+          : g.cy + roadHalf + carGap + vlen / 2 + pos * pitch + extra[laneIdx];
+        cx0 = sx; cy0 = yBase;
       } else {
         const sy = g.cy + off;
         const xBase = a === 'W'
-          ? g.cx - roadHalf - carGap - carLen / 2 - pos * pitch
-          : g.cx + roadHalf + carGap + carLen / 2 + pos * pitch;
-        x = xBase - carW / 2; y = sy - carH / 2;
+          ? g.cx - roadHalf - carGap - vlen / 2 - pos * pitch - extra[laneIdx]
+          : g.cx + roadHalf + carGap + vlen / 2 + pos * pitch + extra[laneIdx];
+        cx0 = xBase; cy0 = sy;
       }
+      ctx.save();
+      ctx.translate(cx0, cy0);
+      if (vertical) ctx.rotate(Math.PI / 2);      // body x-axis along the road
       ctx.fillStyle = color;
       ctx.globalAlpha = 0.92;
-      rr(ctx, x, y, carW, carH, Math.min(carW, carH) * 0.28);
-      ctx.fill();
+      drawVehicleBody(ctx, kind, carLen, bodyW);
+      ctx.restore();
       ctx.globalAlpha = 1;
+      extra[laneIdx] += vlen - carLen;            // push followers further back
     }
   }
 
@@ -602,6 +746,7 @@
     for (const mv of MOVEMENTS_MEDIAN_FIRST) {   // median -> kerb
       for (let k = 0; k < per[mv]; k++) { bands[mv].push((j + 0.5) * eff); j++; }
     }
+    bands.eff = eff;                           // actual lane pitch (vehicles must fit inside)
     return bands;                              // unsigned distance from the centreline
   }
 
@@ -610,68 +755,108 @@
 
   // a vehicle mid-crossing, drawn along its true turning path:
   //   T -> straight across, R -> right-hand quarter arc, L -> left-hand arc
+  // roundabout -> straight lead-in, circulate the ring, straight lead-out
+  // (right-hand traffic circles counter-clockwise on screen).
+  const RING_ANGLE = { N: -Math.PI / 2, S: Math.PI / 2, E: 0, W: Math.PI };
+  function exitArmFor(a, turn) {
+    const H = { N: [0, 1], S: [0, -1], W: [1, 0], E: [-1, 0] };
+    const V2ARM = { '0,1': 'S', '0,-1': 'N', '1,0': 'E', '-1,0': 'W' };
+    const hx = H[a][0], hy = H[a][1];
+    const d = turn === 'R' ? [-hy, hx] : turn === 'L' ? [hy, -hx] : [-hx, -hy];
+    return V2ARM[d.join(',')];
+  }
+
   function drawCrossing(ctx, g, c, bands) {
     const a = c.a, turn = c.turn;
-    const sgnIn = latSignFor(a);
-    const vIn = (bands[turn] && bands[turn][0]) || g.laneW * 0.6;
-    const vOut = (bands.T && bands.T[0]) || g.laneW * 0.6;
-    const offIn = sgnIn * vIn;
-
-    // heading per approach (screen coords, y grows downwards)
-    const HEAD = { N: [0, 1], S: [0, -1], W: [1, 0], E: [-1, 0] };
-    let hx = HEAD[a][0], hy = HEAD[a][1];
-    let dx = hx, dy = hy;
-    if (turn === 'R') { dx = -hy; dy = hx; }          // rotate right (clockwise)
-    else if (turn === 'L') { dx = hy; dy = -hx; }     // rotate left
-
-    const R = g.roadHalf;
-    const inVertical = (a === 'N' || a === 'S');
-    const outVertical = (dx === 0);
-    // exit lanes sit on the right-hand side of the *exit* heading
-    const sgnOut = outVertical ? -Math.sign(dy || 1) : Math.sign(dx || 1);
-
-    let x0, y0, x1, y1;
-    if (inVertical) {
-      x0 = g.cx + offIn;
-      y0 = a === 'N' ? g.cy - R : g.cy + R;
-    } else {
-      x0 = a === 'W' ? g.cx - R : g.cx + R;
-      y0 = g.cy + offIn;
-    }
-    if (outVertical) {
-      x1 = g.cx + sgnOut * vOut;
-      y1 = dy > 0 ? g.cy + R : g.cy - R;
-    } else {
-      x1 = dx > 0 ? g.cx + R : g.cx - R;
-      y1 = g.cy + sgnOut * vOut;
-    }
-
     const p = clamp(c.p, 0, 1);
     let x, y, ang;
-    if (turn === 'T') {
-      x = x0 + (x1 - x0) * p;
-      y = y0 + (y1 - y0) * p;
-      ang = Math.atan2(y1 - y0, x1 - x0);
+
+    if (state.junction && state.junction.type === 'roundabout') {
+      const rC = g.roadHalf * 0.59;               // mid of the circulating lane
+      const thIn = RING_ANGLE[a];
+      const thOut = RING_ANGLE[exitArmFor(a, turn)];
+      let d = thOut - thIn;                       // travel CCW on screen (y grows down)
+      while (d > -1e-9) d -= 2 * Math.PI;
+      while (d <= -2 * Math.PI + 1e-9) d += 2 * Math.PI;
+      const EXT = 0.43;                           // lead-in/out to the stop line (rC+EXT ≈ roadHalf)
+      const ringPt = (th, r) => [g.cx + Math.cos(th) * r, g.cy + Math.sin(th) * r];
+      const entry0 = ringPt(thIn, rC + EXT), entry1 = ringPt(thIn, rC);
+      const exit1 = ringPt(thOut, rC), exit0 = ringPt(thOut, rC + EXT);
+      if (p < 0.22) {
+        const u = p / 0.22;
+        x = entry0[0] + (entry1[0] - entry0[0]) * u;
+        y = entry0[1] + (entry1[1] - entry0[1]) * u;
+        ang = Math.atan2(entry1[1] - entry0[1], entry1[0] - entry0[0]);
+      } else if (p > 0.78) {
+        const u = (p - 0.78) / 0.22;
+        x = exit1[0] + (exit0[0] - exit1[0]) * u;
+        y = exit1[1] + (exit0[1] - exit1[1]) * u;
+        ang = Math.atan2(exit0[1] - exit1[1], exit0[0] - exit1[0]);
+      } else {
+        const u = (p - 0.22) / 0.56;
+        const th = thIn + d * u;
+        x = g.cx + Math.cos(th) * rC;
+        y = g.cy + Math.sin(th) * rC;
+        ang = Math.atan2(Math.cos(th) * d, -Math.sin(th) * d);
+      }
     } else {
-      // quadratic Bezier with the control point at the lane-crossing corner
-      const cxq = inVertical ? x0 : x1;
-      const cyq = inVertical ? y1 : y0;
-      const u = 1 - p;
-      x = u * u * x0 + 2 * u * p * cxq + p * p * x1;
-      y = u * u * y0 + 2 * u * p * cyq + p * p * y1;
-      const tx = 2 * u * (cxq - x0) + 2 * p * (x1 - cxq);
-      const ty = 2 * u * (cyq - y0) + 2 * p * (y1 - cyq);
-      ang = Math.atan2(ty, tx);
+      const sgnIn = latSignFor(a);
+      const vIn = (bands[turn] && bands[turn][0]) || g.laneW * 0.6;
+      const vOut = (bands.T && bands.T[0]) || g.laneW * 0.6;
+      const offIn = sgnIn * vIn;
+
+      // heading per approach (screen coords, y grows downwards)
+      const HEAD = { N: [0, 1], S: [0, -1], W: [1, 0], E: [-1, 0] };
+      let hx = HEAD[a][0], hy = HEAD[a][1];
+      let dx = hx, dy = hy;
+      if (turn === 'R') { dx = -hy; dy = hx; }          // rotate right (clockwise)
+      else if (turn === 'L') { dx = hy; dy = -hx; }     // rotate left
+
+      const R = g.roadHalf;
+      const inVertical = (a === 'N' || a === 'S');
+      const outVertical = (dx === 0);
+      // exit lanes sit on the right-hand side of the *exit* heading
+      const sgnOut = outVertical ? -Math.sign(dy || 1) : Math.sign(dx || 1);
+
+      let x0, y0, x1, y1;
+      if (inVertical) {
+        x0 = g.cx + offIn;
+        y0 = a === 'N' ? g.cy - R : g.cy + R;
+      } else {
+        x0 = a === 'W' ? g.cx - R : g.cx + R;
+        y0 = g.cy + offIn;
+      }
+      if (outVertical) {
+        x1 = g.cx + sgnOut * vOut;
+        y1 = dy > 0 ? g.cy + R : g.cy - R;
+      } else {
+        x1 = dx > 0 ? g.cx + R : g.cx - R;
+        y1 = g.cy + sgnOut * vOut;
+      }
+
+      if (turn === 'T') {
+        x = x0 + (x1 - x0) * p;
+        y = y0 + (y1 - y0) * p;
+        ang = Math.atan2(y1 - y0, x1 - x0);
+      } else {
+        // quadratic Bezier with the control point at the lane-crossing corner
+        const cxq = inVertical ? x0 : x1;
+        const cyq = inVertical ? y1 : y0;
+        const u = 1 - p;
+        x = u * u * x0 + 2 * u * p * cxq + p * p * x1;
+        y = u * u * y0 + 2 * u * p * cyq + p * p * y1;
+        const tx = 2 * u * (cxq - x0) + 2 * p * (x1 - cxq);
+        const ty = 2 * u * (cyq - y0) + 2 * p * (y1 - cyq);
+        ang = Math.atan2(ty, tx);
+      }
     }
 
-    const carLen = g.carLen, carW = g.laneW * 0.78;
     ctx.save();
     ctx.globalAlpha = 0.95;
     ctx.translate(x, y);
     ctx.rotate(ang);
     ctx.fillStyle = COL[turn] || '#9fb0c0';
-    rr(ctx, -carLen / 2, -carW / 2, carLen, carW, Math.min(carLen, carW) * 0.3);
-    ctx.fill();
+    drawVehicleBody(ctx, c.kind || 'car', g.carLen, (bands.eff || g.laneW) * 0.78);
     ctx.restore();
     ctx.globalAlpha = 1;
   }
@@ -930,131 +1115,12 @@
   }
 
   /* ===========================================================================
-   * 10) ASK PANEL (agentic copilot + TTS + mic)
+   * 10) ASK PANEL — extracted to web/ask.js (shared with network.html).
+   *    Initialised with junction context in bindEvents(); see SFAsk.init.
    * ======================================================================== */
 
-  // One human-readable line per tool result digest.
-  function digestLine(digest) {
-    if (!digest) return '';
-    if (digest.ok === false) return 'Fehler: ' + (digest.error || 'unbekannt');
-    if (digest.tool === 'simulate_network') {
-      const s = digest.policies || {};
-      const f = (s.fixed || {}).avg_delay_s, a = (s.adaptive || {}).avg_delay_s;
-      return 'Fester Plan ' + f + ' s → adaptiv ' + a + ' s mittlere Verzögerung' +
-        (digest.improvement && digest.improvement.avg_delay_pct != null
-          ? ' (' + digest.improvement.avg_delay_pct + ' %)' : '');
-    }
-    const f = digest.fixed || {}, a = digest.adaptive || {}, i = digest.improvement || {};
-    return f.avg_delay_s + ' s → ' + a.avg_delay_s + ' s mittlere Verzögerung' +
-      (i.avg_delay_pct != null ? ' (' + i.avg_delay_pct + ' %)' : '');
-  }
-
-  // Collapsible trace: which tool ran, with which arguments, and what came back.
-  function renderAskSteps(steps, note) {
-    const box = $('ask-steps'), list = $('ask-steps-list');
-    if (!box || !list) return;
-    list.innerHTML = '';
-    $('ask-steps-n').textContent = String(steps.length);
-    if (!steps.length && !note) { box.hidden = true; return; }
-    steps.forEach((s) => {
-      const row = document.createElement('div');
-      row.className = 'ask-step' + (s.ok === false ? ' step-error' : '');
-      row.innerHTML =
-        '<div class="ask-step-head"><span class="ask-step-tool">' + esc(String(s.tool)) +
-        '</span><code>' + esc(JSON.stringify(s.args || {})) + '</code></div>' +
-        '<div class="ask-step-digest">' + esc(digestLine(s.digest)) + '</div>';
-      list.appendChild(row);
-    });
-    if (note) {
-      const n = document.createElement('div');
-      n.className = 'ask-step-note';
-      n.textContent = note;
-      list.appendChild(n);
-    }
-    box.hidden = false;
-  }
-
-  // Ask panel has three modes: agent (runs the simulator as a tool), panel
-  // (the same, plus critic + writer self-check), and the fast explainer
-  // (narrates the run currently on screen via /api/explain).
-  let askMode = 'agent';
-  const ASK_PLACEHOLDER = {
-    agent: 'z. B. Was passiert in den Ferien mit 15 % Lkw?',
-    panel: 'z. B. Warum sinkt der Durchsatz in den Ferien?',
-    explain: 'z. B. Warum wechselt die Phase so oft?',
-  };
-  const ASK_MODES = ['agent', 'panel', 'explain'];
-
-  function setAskMode(mode) {
-    askMode = ASK_MODES.includes(mode) ? mode : 'agent';
-    for (const m of ASK_MODES) {
-      const el = $('ask-mode-' + m);
-      if (el) el.classList.toggle('active', askMode === m);
-    }
-    $('ask-input').placeholder = ASK_PLACEHOLDER[askMode];
-  }
-
-  async function askExplain() {
-    const q = $('ask-input').value.trim();
-    if (!q) return;
-    const btn = $('ask-send');
-    btn.disabled = true; btn.textContent = 'Denkt…';
-    $('ask-answer').textContent = '…';
-    try {
-      if (askMode === 'explain') {
-        const res = await fetchJSON('/api/explain', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: q, scope: 'compare' }),
-        });
-        state.answer = res.answer || '';
-        $('ask-answer').textContent = state.answer || '(leere Antwort)';
-        renderAskSteps([], null);
-        const src = $('ask-source');
-        const live = res.source === 'featherless';
-        src.className = 'source-pill ' + (live ? 'featherless' : 'fallback');
-        src.textContent = live
-          ? 'Featherless' + (res.model ? ' · ' + res.model : '')
-          : 'Offline-Fallback';
-      } else {
-        const res = await fetchJSON('/api/agent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ question: q, max_rounds: 3,
-                                 mode: askMode === 'panel' ? 'panel' : 'solo' }),
-        });
-        state.answer = res.answer || '';
-        let extra = res.note || '';
-        if (res.pipeline === 'panel' && Array.isArray(res.checks)) {
-          const bits = res.checks.map((c) =>
-            c.stage + ': ' + c.verdict + (c.issues && c.issues.length
-              ? ' (' + c.issues.join('; ') + ')' : ''));
-          extra = (extra ? extra + ' | ' : '') + bits.join(' | ');
-        }
-        $('ask-answer').textContent = state.answer || '(leere Antwort)';
-        renderAskSteps(res.steps || [], extra);
-        const src = $('ask-source');
-        const live = res.source === 'featherless';
-        src.className = 'source-pill ' + (live ? 'featherless' : 'fallback');
-        src.textContent = (live
-          ? 'Featherless' + (res.model ? ' · ' + res.model : '')
-          : 'Offline-Fallback')
-          + (res.pipeline === 'panel' ? ' · Panel' : '')
-          + (res.cached ? ' · Cache' : '');
-      }
-    } catch (e) {
-      state.answer = '';
-      renderAskSteps([], null);
-      $('ask-answer').textContent = 'Anfrage fehlgeschlagen: ' + e.message +
-        '  (Offline? Backend über http://127.0.0.1:8000 öffnen.)';
-      const src = $('ask-source'); src.className = 'source-pill'; src.textContent = 'Fehler';
-    } finally {
-      btn.disabled = false; btn.textContent = 'Senden';
-    }
-  }
-
-  // Speak a concise summary of the current result (voice is first-class, not
-  // only behind the "Ask" panel).
+  // Speak a concise summary of the current result (junction phrasing; the
+  // network page injects its own). Fed to SFAsk for "Ergebnis vorlesen".
   function buildResultSentence() {
     const r = state.result;
     if (!r || !r.summary || !r.summary.fixed || !r.summary.adaptive) return '';
@@ -1064,92 +1130,6 @@
       fmt(f.avg_delay_s, 1) + ' Sekunden Verzögerung je Fahrzeug. Adaptive Steuerung: ' +
       fmt(a.avg_delay_s, 1) + ' Sekunden, also ' + fmt(i.avg_delay_pct != null ? i.avg_delay_pct : 0, 1) +
       ' Prozent weniger. Durchsatz ' + fmt(a.throughput_vph, 0) + ' Fahrzeuge pro Stunde.';
-  }
-
-  async function speakResult() {
-    const text = buildResultSentence();
-    const btn = $('btn-speak-result');
-    if (btn) { btn.disabled = true; btn.textContent = '🔊 Lädt…'; }
-    try {
-      if (!text) { alert('Noch kein Ergebnis – bitte zuerst simulieren.'); return; }
-      const res = await apiFetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text }),
-      });
-      if (res.status === 501) { alert('Sprachausgabe nicht konfiguriert: ELEVENLABS_API_KEY in .env setzen und Server neu starten.'); return; }
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const url = URL.createObjectURL(await res.blob());
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
-    } catch (e) {
-      alert('Vorlesen nicht möglich: ' + e.message);
-    } finally {
-      if (btn) { btn.disabled = false; btn.textContent = '🔊 Ergebnis vorlesen'; }
-    }
-  }
-
-  async function speakAnswer() {
-    const text = state.answer || $('ask-answer').textContent;
-    if (!text || text === '…') return;
-    const btn = $('ask-speak');
-    btn.disabled = true; btn.textContent = '🔊 Lädt…';
-    try {
-      const res = await apiFetch('/api/tts', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text }),
-      });
-      if (res.status === 501) {
-        let hint = 'TTS nicht konfiguriert.';
-        try { const j = await res.json(); if (j && j.hint) hint += ' ' + j.hint; } catch (_) {}
-        $('ask-answer').textContent = hint + '\n\n' + text;
-        return;
-      }
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
-    } catch (e) {
-      $('ask-answer').textContent = 'Vorlesen nicht möglich: ' + e.message + '\n\n' + text;
-    } finally {
-      btn.disabled = false; btn.textContent = '🔊 Vorlesen';
-    }
-  }
-
-  function setupMic() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const btn = $('ask-mic');
-    if (!SR) {
-      btn.disabled = true;
-      btn.title = 'Web Speech API nicht verfügbar';
-      btn.textContent = '🎤 n. verfügbar';
-      return;
-    }
-    let rec = null, listening = false;
-    btn.addEventListener('click', () => {
-      if (listening) { try { rec.stop(); } catch (_) {} return; }
-      try {
-        rec = new SR();
-        rec.lang = 'de-DE';
-        rec.interimResults = false;
-        rec.maxAlternatives = 1;
-        rec.onresult = (ev) => {
-          const txt = ev.results[0][0].transcript;
-          $('ask-input').value = txt;
-          askExplain();
-        };
-        rec.onend = () => { listening = false; btn.textContent = '🎤 Mikrofon'; btn.classList.remove('active'); };
-        rec.onerror = () => { listening = false; btn.textContent = '🎤 Mikrofon'; btn.classList.remove('active'); };
-        rec.start();
-        listening = true; btn.textContent = '🎤 hört…'; btn.classList.add('active');
-      } catch (_) {
-        btn.disabled = true; btn.textContent = '🎤 n. verfügbar';
-      }
-    });
   }
 
   /* ===========================================================================
@@ -1413,7 +1393,25 @@
   /* ===========================================================================
    * 15) EVENT WIRING + INIT
    * ======================================================================== */
+  // dark ⇄ light theme (persisted; canvases stay dark "monitors")
+  function initTheme() {
+    const btn = $('btn-theme');
+    const apply = (t) => {
+      document.body.dataset.theme = t;
+      if (btn) btn.textContent = t === 'light' ? '☀️' : '🌙';
+      try { localStorage.setItem('sf-theme', t); } catch (_) {}
+    };
+    let t = 'dark';
+    try { t = localStorage.getItem('sf-theme') || 'dark'; } catch (_) {}
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    if (btn) btn.addEventListener('click', () =>
+      apply(document.body.dataset.theme === 'light' ? 'dark' : 'light'));
+    apply(t);
+  }
+
   function bindEvents() {
+    initKpiView();
+    initTheme();
     $('btn-simulate').addEventListener('click', runSimulation);
 
     $('btn-play').addEventListener('click', () => {
@@ -1430,10 +1428,12 @@
       });
     });
 
-    document.querySelectorAll('.mode-btn').forEach((b) => {
+    // viewer mode only — .ask-mode buttons belong to the ask panel (ask.js)
+    const viewerModeBtns = document.querySelectorAll('.modes:not(.ask-mode) .mode-btn');
+    viewerModeBtns.forEach((b) => {
       b.addEventListener('click', () => {
         state.mode = b.dataset.mode;
-        document.querySelectorAll('.mode-btn').forEach((x) => x.classList.toggle('active', x === b));
+        viewerModeBtns.forEach((x) => x.classList.toggle('active', x === b));
       });
     });
 
@@ -1443,13 +1443,13 @@
       setRangeFill(prog, Number(prog.value));
     });
 
-    $('ask-send').addEventListener('click', askExplain);
-    $('ask-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') askExplain(); });
-    $('ask-mode-agent').addEventListener('click', () => setAskMode('agent'));
-    $('ask-mode-panel').addEventListener('click', () => setAskMode('panel'));
-    $('ask-mode-explain').addEventListener('click', () => setAskMode('explain'));
-    $('ask-speak').addEventListener('click', speakAnswer);
-    if ($('btn-speak-result')) $('btn-speak-result').addEventListener('click', speakResult);
+    if (window.SFAsk) SFAsk.init({
+      fetchJSON: fetchJSON,
+      apiFetch: apiFetch,
+      context: function () { return { kind: 'junction' }; },
+      resultSentence: buildResultSentence,
+    });
+    if ($('btn-speak-result')) $('btn-speak-result').addEventListener('click', () => SFAsk.speakResult());
 
     // scenario presets (one click)
     document.querySelectorAll('.preset').forEach((b) => {
@@ -1463,19 +1463,13 @@
 
     // export the intersection view as PNG
     if ($('btn-export')) $('btn-export').addEventListener('click', () => {
-      const cv = document.getElementById('canvas-main');
-      if (!cv) return;
-      const a = document.createElement('a');
-      a.href = cv.toDataURL('image/png');
-      a.download = 'signalflow-kreuzung.png';
-      a.click();
+      exportCanvas('canvas-main', 'signalflow-kreuzung.png');
     });
 
     // auto-speak toggle
     if ($('chk-autospeak')) $('chk-autospeak').addEventListener('change', (e) => {
       state.autoSpeak = !!e.target.checked;
     });
-    setupMic();
 
     window.addEventListener('resize', () => { renderCharts(); });
   }

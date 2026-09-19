@@ -6,6 +6,7 @@
 <title>SignalFlow · Adaptive Signal Control</title>
 <!-- No external assets: everything is local (.css / .js), works fully offline. -->
 <link rel="stylesheet" href="styles.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='11' y='3' width='10' height='26' rx='4' fill='%230e1620' stroke='%23243244' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='9' r='2.6' fill='%23ef4444'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%23f59e0b'/%3E%3Ccircle cx='16' cy='23' r='2.6' fill='%2322c55e'/%3E%3C/svg%3E" />
 </head>
 <body>
 
@@ -40,6 +41,7 @@
 
   <a class="btn ghost" href="network.html">Netzwerk-Simulation</a>
   <a class="btn ghost" href="writeup.html">Writeup</a>
+  <button id="btn-theme" class="btn ghost icon" type="button" title="Farbschema wechseln">🌙</button>
   <button id="btn-speak-result" class="btn ghost" type="button">🔊 Ergebnis vorlesen</button>
   <button id="btn-export" class="btn ghost" type="button" title="Kreuzungsansicht als PNG">⤓ Bild</button>
   <label class="btn ghost" style="cursor:pointer"><input id="chk-autospeak" type="checkbox" style="vertical-align:middle;margin-right:6px" />Auto-Vorlesen</label>
@@ -57,6 +59,11 @@
     Für echte Ergebnisse über <code>http://127.0.0.1:8000</code> öffnen.
   </div>
   <div id="sim-error" class="notice error hidden"></div>
+
+  <!-- Two-column dashboard: simulation flow on the left, the ask panel as a
+       sticky companion on the right (single column on narrow screens). -->
+  <div class="dash">
+  <div class="dash-main">
 
   <!-- ======================= CONTROL BAR ======================= -->
   <section class="panel controls" aria-label="Simulationsparameter">
@@ -135,8 +142,18 @@
   </section>
 
   <!-- ========================== KPIs ========================== -->
-  <section class="kpi-grid" id="kpi-grid" aria-label="Kennzahlen">
-    <!-- KPI cards are created by app.js so IDs always stay in sync -->
+  <section class="panel kpi-panel" aria-label="Kennzahlen">
+    <div class="kpi-head">
+      <h2>Kennzahlen</h2>
+      <div class="kpi-view" role="group" aria-label="Kennzahl-Ansicht">
+        <button class="kpi-view-btn" data-view="table" type="button" title="Kompakte Matrix">Tabelle</button>
+        <button class="kpi-view-btn" data-view="cards" type="button" title="Status-Karten">Karten</button>
+      </div>
+    </div>
+    <div class="kpi-grid" id="kpi-grid">
+      <!-- KPI cards are created by app.js so IDs always stay in sync -->
+    </div>
+    <div class="kpi-table-wrap" id="kpi-table-wrap" hidden></div>
   </section>
 
   <!-- ====================== CANVAS VIEWER ====================== -->
@@ -205,21 +222,22 @@
     </div>
   </section>
 
-  <!-- ====================== BOTTOM PANELS ====================== -->
-  <section class="bottom">
-    <div class="panel decisions">
-      <h2>Warum? – Entscheidungsprotokoll</h2>
-      <p class="panel-sub">Phasenwechsel des adaptiven Controllers mit Begründung</p>
-      <div class="decisions-body">
-        <ul class="decision-list" id="decisions-list"></ul>
-        <div class="pressure-box">
-          <h3>Druck je Phase</h3>
-          <table class="pressures" id="pressures-table"></table>
-        </div>
+  <!-- ====================== DECISIONS ====================== -->
+  <section class="panel decisions">
+    <h2>Warum? – Entscheidungsprotokoll</h2>
+    <p class="panel-sub">Phasenwechsel des adaptiven Controllers mit Begründung</p>
+    <div class="decisions-body">
+      <ul class="decision-list" id="decisions-list"></ul>
+      <div class="pressure-box">
+        <h3>Druck je Phase</h3>
+        <table class="pressures" id="pressures-table"></table>
       </div>
     </div>
+  </section>
+  </div><!-- /.dash-main -->
 
-    <div class="panel ask">
+  <aside class="dash-side">
+    <section class="panel ask">
       <h2>Frag SignalFlow</h2>
       <p class="panel-sub">Agent simuliert selbst · Panel prüft sich selbst (Kritiker + Writer) · Erklären deutet den aktuellen Lauf</p>
       <div class="modes ask-mode" role="group" aria-label="Antwortmodus">
@@ -245,14 +263,16 @@
         </div>
         <p id="ask-answer" class="answer-text">Noch keine Antwort. Stelle eine Frage zu den Simulationsergebnissen.</p>
       </div>
-    </div>
-  </section>
+    </section>
+  </aside>
+  </div><!-- /.dash -->
 
   <footer class="foot">
     <span id="meta-info">Bereit.</span>
   </footer>
 </main>
 
+<script src="ask.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

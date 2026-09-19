@@ -49,13 +49,13 @@ ARTERIAL_RE = (
 
 # region id -> (display name, bbox=(south, west, north, east)[, highway regex])
 REGIONS = {
-    "expo_riem": ("Messe Muenchen / ICM Riem", (48.1280, 11.6830, 48.1440, 11.7080)),
-    "innenstadt": ("Muenchen Innenstadt / Altstadtring", (48.1280, 11.5450, 48.1500, 11.5900)),
+    "expo_riem": ("Messe München / ICM Riem", (48.1280, 11.6830, 48.1440, 11.7080)),
+    "innenstadt": ("München Innenstadt / Altstadtring", (48.1280, 11.5450, 48.1500, 11.5900)),
     # other German cities (arterial scope) + a university city
     "berlin_mitte": ("Berlin Mitte / Alexanderplatz", (52.5120, 13.3850, 52.5290, 13.4130), ARTERIAL_RE),
     "hamburg_innenstadt": ("Hamburg Innenstadt / Jungfernstieg", (53.5440, 9.9820, 53.5610, 10.0120), ARTERIAL_RE),
-    "koeln_innenstadt": ("Koeln Innenstadt / Dom & Deutz", (50.9280, 6.9440, 50.9460, 6.9820), ARTERIAL_RE),
-    "heidelberg_uni": ("Heidelberg Altstadt / Universitaet", (49.4040, 8.6780, 49.4210, 8.7180), ARTERIAL_RE),
+    "koeln_innenstadt": ("Köln Innenstadt / Dom & Deutz", (50.9280, 6.9440, 50.9460, 6.9820), ARTERIAL_RE),
+    "heidelberg_uni": ("Heidelberg Altstadt / Universität", (49.4040, 8.6780, 49.4210, 8.7180), ARTERIAL_RE),
 }
 
 

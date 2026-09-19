@@ -121,6 +121,42 @@ class ToolBoxTest(unittest.TestCase):
         self.assertEqual(digest["fixed"]["avg_delay_s"], 20.0)
         self.assertEqual(digest["improvement"]["avg_delay_pct"], 50.0)
 
+    def test_explain_last_detects_network_shape(self):
+        """A district result must digest as network, not as a junction run."""
+        last = {"region": "expo_riem", "name": "Neu-Riem",
+                "config": {"duration_min": 20, "seed": 1},
+                "scenario": {"name": "normal", "label": "Normal"},
+                "summary": {"fixed": {"avg_delay_s": 40.0, "throughput_vph": 3000,
+                                      "avg_travel_time_s": 180.0, "co2_g": 90000,
+                                      "served": 5000},
+                            "adaptive": {"avg_delay_s": 30.0}},
+                "improvement": {"avg_delay_pct": 25.0}}
+        digest = ToolBox(last_result=last).execute("explain_last", {})
+        self.assertTrue(digest["ok"])
+        self.assertEqual(digest["region"], "expo_riem")
+        self.assertIn("policies", digest)
+        self.assertNotIn("fixed", digest)          # junction view would add this
+        self.assertNotIn("decisions_sample", digest)
+
+    def test_context_hint_routes_deterministic_path_and_cache(self):
+        """The hint carries the on-screen region into the no-key agent path
+        and is part of the answer cache key (no cross-context leaks)."""
+        _clear_caches()
+        q = "Was bringt die adaptive Steuerung im aktuellen Blick?"
+        hint = ("Kontext: Netzwerk-Simulation, Region 'expo_riem' (Neu-Riem), "
+                "Szenario Normal. Beantworte die Frage für diese Region "
+                "(Werkzeug: simulate_network).")
+        with unittest.mock.patch("signalflow.agent.featherless_available",
+                                 return_value=False):
+            out_net = run_agent(q, context_hint=hint)
+            out_junction = run_agent(q)            # same text, no hint
+        self.assertEqual(out_net["source"], "fallback")
+        self.assertEqual(out_net["steps"][0]["tool"], "simulate_network")
+        self.assertEqual(out_net["steps"][0]["args"].get("region"), "expo_riem")
+        self.assertEqual(out_junction["steps"][0]["tool"], "simulate")
+        self.assertFalse(out_net.get("cached"))
+        self.assertFalse(out_junction.get("cached"))
+
     def test_result_cache_marks_second_call(self):
         box = ToolBox()
         first = box.execute("simulate", {"duration_min": 2})

@@ -28,6 +28,8 @@
 }
 
 *{ box-sizing: border-box; }
+/* the hidden attribute must always win, even over `display:grid` etc. */
+[hidden]{ display:none !important; }
 html,body{ margin:0; padding:0; }
 body{
   background:
@@ -39,6 +41,32 @@ body{
   font-size: 14px;
   line-height: 1.45;
   -webkit-font-smoothing: antialiased;
+}
+
+/* --------------------------- light theme -------------------------------- */
+/* Toggled via body[data-theme]; the canvases keep their dark "monitor"
+   look either way. */
+body[data-theme="light"]{
+  --bg:#eef2f7; --bg-2:#e7edf4; --panel:#ffffff; --panel-2:#f1f5fa;
+  --line:#d3dce7; --line-soft:#e3e9f1;
+  --txt:#182430; --muted:#5b6b7d; --faint:#8798aa;
+  --accent:#0d9488; --accent-2:#0369a1; --fixed:#64748b;
+  --shadow: 0 1px 0 rgba(255,255,255,.6), 0 8px 24px rgba(23,42,64,.10);
+  background:
+    radial-gradient(1200px 600px at 80% -10%, rgba(13,148,136,.06), transparent 60%),
+    radial-gradient(900px 500px at -10% 10%, rgba(3,105,161,.05), transparent 60%),
+    var(--bg);
+}
+body[data-theme="light"] .topbar{
+  background: linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.84));
+}
+body[data-theme="light"] .btn:hover{ border-color:#b9c6d6; background:#e9eef5; }
+body[data-theme="light"] .btn.primary:hover{ background: linear-gradient(180deg, #128f83, #0e7c70); }
+body[data-theme="light"] .decision-item:hover{ border-color:#b9c6d6; }
+body[data-theme="light"] .answer-box,
+body[data-theme="light"] .ask-steps{ background:#f4f7fb; }
+body[data-theme="light"] input[type=range]{
+  background: linear-gradient(90deg, var(--accent) 0%, var(--accent) var(--fill,50%), #cbd5e1 var(--fill,50%), #cbd5e1 100%);
 }
 
 h1,h2,h3{ margin:0; font-weight:650; letter-spacing:.2px; }
@@ -96,7 +124,7 @@ code{ font-family: var(--mono); font-size:.9em; color: var(--accent-2); }
 .btn.active{ border-color:var(--accent); color:var(--accent); }
 
 /* --------------------------- layout blocks -------------------------- */
-#main{ max-width:1360px; margin:0 auto; padding:18px 20px 40px; display:flex; flex-direction:column; gap:16px; }
+#main{ max-width:1760px; margin:0 auto; padding:18px 20px 40px; display:flex; flex-direction:column; gap:16px; }
 
 .panel{
   background: linear-gradient(180deg, var(--panel), var(--bg-2));
@@ -160,9 +188,40 @@ select{
   font-family:var(--mono); font-size:12.5px; font-weight:600;
   padding:2px 8px; border-radius:999px; border:1px solid var(--line);
 }
+/* cards with several badges (network: adaptive + green wave) keep them in one row */
+.kpi .deltas{ display:flex; flex-wrap:wrap; gap:6px; margin-top:auto; }
+.kpi .deltas .delta{ margin-top:0; }
 .kpi .delta.good{ color:var(--good); border-color:rgba(34,197,94,.4); background:rgba(34,197,94,.08); }
 .kpi .delta.bad{ color:var(--bad); border-color:rgba(239,68,68,.4); background:rgba(239,68,68,.08); }
 .kpi .delta.neutral{ color:var(--muted); }
+.kpi .delta.mid{ color:var(--yellow); border-color:rgba(245,158,11,.4); background:rgba(245,158,11,.08); }
+
+/* ------------- KPI panel: cards ⇄ compact matrix table ----------------- */
+.kpi-panel{ }
+.kpi-head{ display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:12px; }
+.kpi-head h2{ font-size:15px; }
+.kpi-view{ display:inline-flex; border:1px solid var(--line); border-radius:9px; overflow:hidden; }
+.kpi-view-btn{
+  font:inherit; font-size:12px; color:var(--muted); background:var(--panel-2);
+  border:0; border-right:1px solid var(--line); padding:6px 12px; cursor:pointer;
+}
+.kpi-view-btn:last-child{ border-right:0; }
+.kpi-view-btn:hover{ color:var(--txt); }
+.kpi-view-btn.active{ background:rgba(45,212,191,.14); color:var(--accent); }
+.kpi-table-wrap{ overflow-x:auto; }
+table.kpi-table{ width:100%; border-collapse:collapse; font-size:13px; }
+table.kpi-table th, table.kpi-table td{ padding:9px 12px; border-bottom:1px solid var(--line-soft); text-align:right; }
+table.kpi-table tr:last-child th, table.kpi-table tr:last-child td{ border-bottom:0; }
+table.kpi-table th:first-child, table.kpi-table td:first-child{ text-align:left; }
+table.kpi-table thead th{
+  color:var(--muted); font-weight:550; font-size:12px; white-space:nowrap;
+}
+table.kpi-table thead th .unit{ color:var(--faint); font-family:var(--mono); font-size:10.5px; }
+table.kpi-table tbody th.pol{ color:var(--muted); font-weight:550; font-size:12.5px; white-space:nowrap; cursor:help; }
+table.kpi-table tbody th.pol-adaptive{ color:var(--accent); }
+table.kpi-table td.v{ font-family:var(--mono); font-size:13.5px; }
+table.kpi-table td.v.adaptive-v{ color:var(--accent); }
+table.kpi-table td.d{ white-space:nowrap; }
 
 /* ------------------------------ viewer ------------------------------ */
 .viewer{ padding-bottom:14px; }
@@ -283,6 +342,17 @@ table.pressures .bar{ height:6px; border-radius:3px; background:var(--accent); o
 .ask-step.step-error{ border-color:rgba(239,68,68,.4); }
 .ask-step.step-error .ask-step-digest{ color:var(--red); }
 .ask-step-note{ font-size:11.5px; color:var(--yellow); }
+
+/* ------------------------- dashboard split -------------------------- */
+/* Simulation flow on the left, "Frag SignalFlow" as a sticky companion on
+   the right (junction page). The network page mirrors this via .net-top. */
+.dash{ display:grid; grid-template-columns:minmax(0,1fr) 400px; gap:16px; align-items:start; }
+.dash-main{ display:flex; flex-direction:column; gap:16px; min-width:0; }
+.dash-side{ position:sticky; top:74px; }
+@media (max-width:1400px){
+  .dash{ grid-template-columns:1fr; }
+  .dash-side{ position:static; }
+}
 
 /* ------------------------------ footer ----------------------------- */
 .foot{ color:var(--faint); font-size:11.5px; text-align:center; padding:6px 0 0; font-family:var(--mono); }

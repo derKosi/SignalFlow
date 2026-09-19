@@ -57,6 +57,7 @@
     pending: false,
     dirty: false,
     startTs: 0,
+    autoSpeak: false,
   };
 
   /* ---------------------------- Datenzugriff ----------------------------- */
@@ -224,6 +225,7 @@
     if (state.busy) { state.pending = true; return; }
     const sel = $('ctl-region');
     if (!sel || !sel.value) return;
+    closeDrill();          // Knoten-Overlay gehört zum vorherigen Lauf/Gebiet
     state.busy = true;
     setBusy(true);
     hideError();
@@ -303,6 +305,56 @@
     renderKPIs();
     renderCharts();
     renderMeta();
+    if (state.autoSpeak && window.SFAsk) SFAsk.speakResult();
+  }
+
+  /* ------------------------- Ask-Panel / Badges -------------------------- */
+  // Context for web/ask.js: the district currently on screen. The stripped
+  // result rides along with explain requests so the server narrates THIS run.
+  function askContext() {
+    if (!state.result) return { kind: 'junction' };
+    return {
+      kind: 'network',
+      region: state.result.region || (state.regionMeta && state.regionMeta.id) || '',
+      name: state.result.name || (state.regionMeta && state.regionMeta.name) || '',
+      scenario: ($('ctl-scenario') && $('ctl-scenario').value) || '',
+      result: {
+        region: state.result.region,
+        name: state.result.name,
+        scenario: state.result.scenario,
+        summary: state.result.summary,
+        improvement: state.result.improvement,
+      },
+    };
+  }
+
+  // Spoken one-liner for "Ergebnis vorlesen" (network phrasing).
+  function resultSentence() {
+    const r = state.result;
+    if (!r || !r.summary || !r.summary.fixed || !r.summary.adaptive) return '';
+    const f = r.summary.fixed, a = r.summary.adaptive, i = r.improvement || {};
+    return 'SignalFlow Netzwerk ' + (r.name || '') + '. Feste Steuerung: ' +
+      fmt(f.avg_delay_s, 1) + ' Sekunden mittlere Verzögerung. Adaptive Steuerung: ' +
+      fmt(a.avg_delay_s, 1) + ' Sekunden, also ' +
+      fmt(i.avg_delay_pct != null ? i.avg_delay_pct : 0, 1) + ' Prozent weniger.';
+  }
+
+  function renderBadges() {
+    fetchJSON('api/health').then(function (h) {
+      setBadge('badge-featherless', !!h.featherless, 'verbunden', 'Offline-Fallback');
+      setBadge('badge-elevenlabs', !!h.elevenlabs, 'verbunden', 'Offline');
+    }).catch(function () {
+      setBadge('badge-featherless', null, '', '');
+      setBadge('badge-elevenlabs', null, '', '');
+    });
+  }
+  function setBadge(id, ok, okText, offText) {
+    const el = $(id);
+    if (!el) return;
+    el.classList.remove('ok', 'off', 'err');
+    el.classList.add(ok === null ? 'err' : (ok ? 'ok' : 'off'));
+    const s = el.querySelector('.badge-state');
+    if (s) s.textContent = ok === null ? 'nicht erreichbar' : (ok ? okText : offText);
   }
 
   /* ------------------------------- View ---------------------------------- */
@@ -408,6 +460,13 @@
       if (!uv) continue;
       const p = proj(uv);
       if (signalSet.has(nd.id)) {
+        if (state.drill && state.drill.nodeId === nd.id) {
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], 7.5, 0, Math.PI * 2);
+          ctx.strokeStyle = '#e6edf3';
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
         ctx.beginPath();
         ctx.arc(p[0], p[1], 3.0, 0, Math.PI * 2);
         ctx.fillStyle = '#2dd4bf';
@@ -453,6 +512,237 @@
       const idx = state.steps ? clamp(Math.round(state.t / Math.max(1, state.frameDt)), 0, arr.length - 1) : 0;
       qEl.textContent = arr.length ? fmt(arr[idx] || 0, 0) + ' veh' : '–';
     }
+    updateDrillHead();
+    if (state.drill) drawDrill();
+  }
+
+  /* ------------------------- Knoten-Drilldown ---------------------------- */
+  // Click a signalised node on the map -> junction close-up in an overlay:
+  // arms at their TRUE bearings (north up, i.e. correctly rotated), queues
+  // from the link data of the current frame, signal colours from the node's
+  // real phase (axis 0 = N/S feeds, axis 1 = E/W feeds — same split the
+  // server's controller uses).
+
+  function rrLocal(ctx, x, y, rw, rh, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + rw, y, x + rw, y + rh, r);
+    ctx.arcTo(x + rw, y + rh, x, y + rh, r);
+    ctx.arcTo(x, y + rh, x, y, r);
+    ctx.arcTo(x, y, x + rw, y, r);
+    ctx.closePath();
+  }
+
+  function openDrill(nodeId) {
+    const res = state.result;
+    if (!res || !res.network) return;
+    const net = res.network;
+    const byId = new Map();
+    (net.nodes || []).forEach(function (nd) { byId.set(nd.id, nd); });
+    const nd = byId.get(nodeId);
+    if (!nd) return;
+    // echte Knotenform: ALLE Nachbarn (ein- und ausgehende Links — OSM
+    // Einbahnstraßen!) bilden einen Arm; Queue + Ampel nur auf Zufahrten.
+    const armMap = new Map();
+    (net.links || []).forEach(function (lk) {
+      let other = null, incoming = false;
+      if (lk.to === nodeId) { other = lk.from; incoming = true; }
+      else if (lk.from === nodeId) { other = lk.to; }
+      if (other == null || !byId.has(other)) return;
+      const f = byId.get(other);
+      const dlat = f.lat - nd.lat;
+      const dlon = (f.lon - nd.lon) * Math.cos((nd.lat || 0) * Math.PI / 180);
+      if (!armMap.has(other)) {
+        armMap.set(other, {
+          bearing: Math.atan2(dlon, dlat),               // 0 = north, clockwise
+          axis: Math.abs(dlat) >= Math.abs(dlon) ? 0 : 1,// same split as the server
+          lanes: 1, incoming: false, linkId: null, names: new Set(),
+        });
+      }
+      const arm = armMap.get(other);
+      arm.lanes = Math.max(arm.lanes, Math.max(1, lk.lanes || 1));
+      if (incoming) {
+        arm.incoming = true;
+        arm.axis = Math.abs(dlat) >= Math.abs(dlon) ? 0 : 1;
+        if (arm.linkId == null) arm.linkId = lk.id;
+      }
+      if (lk.name) arm.names.add(lk.name);
+    });
+    const arms = Array.from(armMap.values());
+    if (!arms.length) return;
+    arms.sort(function (a, b) { return a.bearing - b.bearing; });
+    const names = [];
+    arms.forEach(function (a) {
+      a.names.forEach(function (n) { if (names.indexOf(n) < 0) names.push(n); });
+    });
+    state.drill = {
+      nodeId: nodeId,
+      arms: arms,
+      names: names.slice(0, 3),
+      type: arms.length >= 4 ? 'Kreuzung' : (arms.length === 3 ? 'T-Kreuzung' : 'Kantenknoten'),
+    };
+    const panel = $('drill');
+    if (panel) panel.hidden = false;
+    updateDrillHead();
+    drawDrill();
+  }
+
+  function closeDrill() {
+    state.drill = null;
+    const panel = $('drill');
+    if (panel) panel.hidden = true;
+    drawActiveCanvases();
+  }
+
+  function updateDrillHead() {
+    const d = state.drill;
+    if (!d) return;
+    const title = $('drill-title'), sub = $('drill-sub');
+    const which = state.mode === 'fixed' ? 'fixed' : 'adaptive';
+    if (title) title.textContent = d.type + ' · ' + d.arms.length + ' Straßen';
+    if (sub) {
+      sub.textContent = (d.names.length ? d.names.join(' · ') + ' — ' : '') +
+        (which === 'fixed' ? 'Fixed-Time' : 'Adaptiv') + ' · Norden oben';
+      sub.title = 'Knoten ' + d.nodeId;
+    }
+  }
+
+  function drawDrill() {
+    const d = state.drill;
+    const canvas = $('drill-canvas');
+    if (!d || !canvas || !state.result) return;
+    const which = state.mode === 'fixed' ? 'fixed' : 'adaptive';
+    const frames = state.frames[which] || [];
+    const f = frames.length ? frames[frameIndex(frames, state.t)] : null;
+    const qmap = new Map(), phmap = new Map();
+    if (f) {
+      (f.q || []).forEach(function (e) { qmap.set(e[0], e[1]); });
+      (f.ph || []).forEach(function (e) { phmap.set(e[0], e[1]); });
+    }
+    const phase = phmap.has(d.nodeId) ? phmap.get(d.nodeId) : 0;
+
+    const fit = fitCanvas(canvas);
+    const ctx = fit.ctx, w = fit.w, h = fit.h;
+    const cx = w / 2, cy = h / 2;
+    ctx.fillStyle = '#0a0e13';
+    ctx.fillRect(0, 0, w, h);
+
+    const R = Math.min(w, h) * 0.12;                 // junction hub radius
+    const roadHalf = Math.min(w, h) * 0.07;
+    const maxLen = Math.min(w, h) / 2 - 8;
+    const carLen = roadHalf * 0.58, carW = roadHalf * 0.34;
+
+    let sumQ = 0;
+    d.arms.forEach(function (arm) {
+      const dx = Math.sin(arm.bearing), dy = -Math.cos(arm.bearing);  // screen dir
+      const ang = Math.atan2(dy, dx);
+      // road surface + edges + dashed centre line
+      ctx.lineCap = 'butt';
+      ctx.strokeStyle = '#141c25';
+      ctx.lineWidth = roadHalf * 2;
+      ctx.beginPath();
+      ctx.moveTo(cx + dx * R, cy + dy * R);
+      ctx.lineTo(cx + dx * maxLen, cy + dy * maxLen);
+      ctx.stroke();
+      ctx.strokeStyle = '#2a3948'; ctx.lineWidth = 1.2;
+      [-1, 1].forEach(function (s) {
+        const ox = -dy * s * roadHalf, oy = dx * s * roadHalf;
+        ctx.beginPath();
+        ctx.moveTo(cx + dx * R + ox, cy + dy * R + oy);
+        ctx.lineTo(cx + dx * maxLen + ox, cy + dy * maxLen + oy);
+        ctx.stroke();
+      });
+      ctx.setLineDash([6, 6]);
+      ctx.strokeStyle = '#33465a';
+      ctx.beginPath();
+      ctx.moveTo(cx + dx * (R + 6), cy + dy * (R + 6));
+      ctx.lineTo(cx + dx * maxLen, cy + dy * maxLen);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      // queue + signal only where traffic actually enters (one-ways!)
+      if (!arm.incoming) return;
+      const q = qmap.get(arm.linkId) || 0;
+      sumQ += q;
+      const lanes = Math.min(3, Math.max(1, Math.round(arm.lanes)));
+      const pitch = carLen * 1.35;
+      const n = Math.min(80, Math.round(q));
+      for (let i = 0; i < n; i++) {
+        const lane = i % lanes, pos = Math.floor(i / lanes);
+        const dist = R + 7 + carLen / 2 + pos * pitch;
+        const off = (lane + 0.5) * (roadHalf / lanes);
+        const vx = cx + dx * dist + dy * off;       // right of the inbound heading
+        const vy = cy + dy * dist - dx * off;
+        ctx.save();
+        ctx.translate(vx, vy);
+        ctx.rotate(ang);
+        ctx.fillStyle = '#9fb0c0';
+        ctx.globalAlpha = 0.95;
+        rrLocal(ctx, -carLen / 2, -carW / 2, carLen, carW, 2);
+        ctx.fill();
+        ctx.restore();
+      }
+      // signal head at the stop line (green when its axis has right of way)
+      const green = arm.axis === phase;
+      ctx.save();
+      ctx.translate(cx + dx * (R + 5), cy + dy * (R + 5));
+      ctx.rotate(ang);
+      ctx.shadowColor = green ? '#22c55e' : '#ef4444';
+      ctx.shadowBlur = 12;
+      ctx.fillStyle = green ? '#22c55e' : '#ef4444';
+      rrLocal(ctx, -2.5, -roadHalf * 0.92, 5, roadHalf * 1.84, 2.5);
+      ctx.fill();
+      ctx.restore();
+      ctx.globalAlpha = 1;
+    });
+
+    // hub
+    ctx.beginPath();
+    ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.fillStyle = '#101823';
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(230,237,243,.55)';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    // compass + readout chip (unrotated HUD)
+    ctx.fillStyle = '#5d6b7a';
+    ctx.font = '600 11px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', cx, 12);
+    const phText = phase === 0 ? 'Achse N–S frei' : 'Achse O–W frei';
+    const tText = 't = ' + Math.round(state.t) + ' s · Σ Queue ' + Math.round(sumQ) + ' veh';
+    ctx.font = '600 11px ' + FONT;
+    const chipW = Math.max(ctx.measureText(phText).width,
+                           ctx.measureText(tText).width) + 20;
+    ctx.fillStyle = 'rgba(9,13,18,.78)';
+    ctx.strokeStyle = '#223040';
+    rrLocal(ctx, w - 12 - chipW, 8, chipW, 32, 8);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = 'rgba(45,212,191,.9)';
+    ctx.fillText(phText, w - 12 - chipW / 2, 18);
+    ctx.fillStyle = 'rgba(139,152,167,.9)';
+    ctx.font = '10px ' + FONT;
+    ctx.fillText(tText, w - 12 - chipW / 2, 30);
+  }
+
+  // signal-node hit test on the map canvas (click opens the drilldown)
+  function drillHit(canvas, ev) {
+    if (!state.result || !state.bbox) return null;
+    const r = canvas.getBoundingClientRect();
+    const x = ev.clientX - r.left, y = ev.clientY - r.top;
+    const proj = makeProj(r.width, r.height);
+    if (!proj) return null;
+    let best = null, bestD = 12;
+    (state.result.network.signal_nodes || []).forEach(function (id) {
+      const uv = state.nodeUV.get(id);
+      if (!uv) return;
+      const p = proj(uv);
+      const dd = Math.hypot(p[0] - x, p[1] - y);
+      if (dd < bestD) { bestD = dd; best = id; }
+    });
+    return best;
   }
 
   /* -------------------------------- KPIs --------------------------------- */
@@ -472,41 +762,102 @@
 
   function renderKPIs() {
     const grid = $('kpi-grid');
+    const tableWrap = $('kpi-table-wrap');
     if (!grid) return;
     const res = state.result;
-    if (!res) { grid.innerHTML = ''; return; }
+    if (!res) { grid.innerHTML = ''; if (tableWrap) tableWrap.innerHTML = ''; return; }
     const fx = res.summary.fixed, ad = res.summary.adaptive, co = res.summary.coordinated;
     const te = res.summary.fixed_tuned_est;
+    const POLICY_INFO = {
+      fixed: 'Fester Signalplan mit vordefinierten Grünzeiten — reagiert nicht auf den live Verkehr (Baseline)',
+      adaptive: 'SignalFlow: Phasenlängen reagieren live auf den Warteschlangen-Druck jeder Richtung (Max-Pressure)',
+      coordinated: 'Grüne Welle: feste Versatz-Offsets zwischen benachbarten Ampeln entlang des Korridors',
+      tuned: 'Fester Plan, getunt aus Detektor-Zählungen (OD-Schätzung) statt echter Nachfrage — fairere Baseline ohne Oracle-Wissen',
+    };
+    const clsFor = function (d) { return d > 5 ? 'good' : (d < -5 ? 'bad' : 'mid'); };
     let html = '';
     KPI_META.forEach(function (m) {
       const fv = m.get(fx), av = m.get(ad);
       const d = deltaPct(fv, av, m.dir);
-      const cls = d > 0.05 ? 'good' : (d < -0.05 ? 'bad' : 'neutral');
+      const cls = clsFor(d);
       const sign = d > 0 ? '+' : '';
       let coRow = '', coDelta = '';
       if (co && m.get(co) != null) {
         const cv = m.get(co);
         const d2 = deltaPct(fv, cv, m.dir);
-        const cls2 = d2 > 0.05 ? 'good' : (d2 < -0.05 ? 'bad' : 'neutral');
-        coRow = '<div class="row coordinated"><span class="tag">Koord.</span><b>' + fmt(cv, m.dec) + '</b></div>';
-        coDelta = '<span class="delta coordinated ' + cls2 + '">Welle ' + (d2 > 0 ? '+' : '') + fmt(d2, 1) + ' %</span>';
+        coRow = '<div class="row coordinated"><span class="tag" title="' + POLICY_INFO.coordinated + '">Koord.</span><b>' + fmt(cv, m.dec) + '</b></div>';
+        coDelta = '<span class="delta coordinated ' + clsFor(d2) + '">Welle ' + (d2 > 0 ? '+' : '') + fmt(d2, 1) + ' %</span>';
       }
       let teRow = '';
       if (te && m.get(te) != null) {
-        teRow = '<div class="row tuned-est"><span class="tag" title="Fester Plan, getunt aus Detektor-Z&auml;hlungen (OD-Sch&auml;tzung) statt echter Nachfrage — fairere Baseline ohne Oracle-Wissen">Tuned*</span><b>' + fmt(m.get(te), m.dec) + '</b></div>';
+        teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span><b>' + fmt(m.get(te), m.dec) + '</b></div>';
       }
       html += '<div class="kpi">' +
         '<header><h3>' + m.title + '</h3><span class="unit">' + (m.unit || '') + '</span></header>' +
         '<div class="kpi-rows">' +
-        '<div class="row fixed"><span class="tag">Fixed</span><b>' + fmt(fv, m.dec) + '</b></div>' +
-        '<div class="row adaptive"><span class="tag">Adaptiv</span><b>' + fmt(av, m.dec) + '</b></div>' +
+        '<div class="row fixed"><span class="tag" title="' + POLICY_INFO.fixed + '">Fixed</span><b>' + fmt(fv, m.dec) + '</b></div>' +
+        '<div class="row adaptive"><span class="tag" title="' + POLICY_INFO.adaptive + '">Adaptiv</span><b>' + fmt(av, m.dec) + '</b></div>' +
         coRow +
         teRow +
         '</div>' +
-        '<span class="delta ' + cls + '">' + sign + fmt(d, 1) + ' %</span>' + coDelta +
+        '<div class="deltas"><span class="delta ' + cls + '">' + sign + fmt(d, 1) + ' %</span>' + coDelta + '</div>' +
         '</div>';
     });
     grid.innerHTML = html;
+    if (tableWrap) {
+      // transposed matrix: policies as rows, metrics as columns,
+      // traffic-light deltas (green/orange/red) under the values
+      const headCells = KPI_META.map(function (m) {
+        return '<th>' + m.title + (m.unit ? ' <span class="unit">' + m.unit + '</span>' : '') + '</th>';
+      }).join('');
+      const fixedCells = KPI_META.map(function (m) {
+        return '<td class="v">' + fmt(m.get(fx), m.dec) + '</td>';
+      }).join('');
+      const adaptiveCells = KPI_META.map(function (m) {
+        const d = deltaPct(m.get(fx), m.get(ad), m.dir);
+        return '<td class="v adaptive-v">' + fmt(m.get(ad), m.dec) +
+          '<br><span class="delta ' + clsFor(d) + '">' + (d > 0 ? '+' : '') + fmt(d, 1) + ' %</span></td>';
+      }).join('');
+      let extraRows = '';
+      if (co) {
+        extraRows += '<tr><th class="pol" title="' + POLICY_INFO.coordinated + '">Koord.</th>' + KPI_META.map(function (m) {
+          const d2 = deltaPct(m.get(fx), m.get(co), m.dir);
+          return '<td class="v">' + fmt(m.get(co), m.dec) +
+            '<br><span class="delta coordinated ' + clsFor(d2) + '">Welle ' + (d2 > 0 ? '+' : '') + fmt(d2, 1) + ' %</span></td>';
+        }).join('') + '</tr>';
+      }
+      if (te) {
+        extraRows += '<tr><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned*</th>' +
+          KPI_META.map(function (m) {
+            return '<td class="v">' + fmt(m.get(te), m.dec) + '</td>';
+          }).join('') + '</tr>';
+      }
+      tableWrap.innerHTML = '<table class="kpi-table"><thead><tr><th></th>' + headCells + '</tr></thead><tbody>' +
+        '<tr><th class="pol" title="' + POLICY_INFO.fixed + '">Fixed</th>' + fixedCells + '</tr>' +
+        '<tr><th class="pol pol-adaptive" title="' + POLICY_INFO.adaptive + '">Adaptiv</th>' + adaptiveCells + '</tr>' +
+        extraRows + '</tbody></table>';
+    }
+  }
+
+  // cards ⇄ table toggle (persisted; table is the default)
+  function initKpiView() {
+    const grid = $('kpi-grid'), wrap = $('kpi-table-wrap');
+    if (!grid || !wrap) return;
+    const apply = function (view) {
+      grid.hidden = view !== 'cards';
+      wrap.hidden = view !== 'table';
+      document.querySelectorAll('.kpi-view-btn').forEach(function (b) {
+        b.classList.toggle('active', b.dataset.view === view);
+      });
+      try { localStorage.setItem('sf-kpi-view', view); } catch (e) { /* ignore */ }
+    };
+    let view = 'table';
+    try { view = localStorage.getItem('sf-kpi-view') || 'table'; } catch (e) { /* ignore */ }
+    if (view !== 'cards' && view !== 'table') view = 'table';
+    document.querySelectorAll('.kpi-view-btn').forEach(function (b) {
+      b.addEventListener('click', function () { apply(b.dataset.view); });
+    });
+    apply(view);
   }
 
   /* ------------------------------- Charts -------------------------------- */
@@ -785,10 +1136,12 @@
       });
     });
 
-    document.querySelectorAll('.mode-btn').forEach(function (b) {
+    // viewer mode only — .ask-mode buttons belong to the ask panel (ask.js)
+    const viewerModeBtns = document.querySelectorAll('.modes:not(.ask-mode) .mode-btn');
+    viewerModeBtns.forEach(function (b) {
       b.addEventListener('click', function () {
         state.mode = b.dataset.mode || 'adaptive';
-        document.querySelectorAll('.mode-btn').forEach(function (x) { x.classList.toggle('active', x === b); });
+        viewerModeBtns.forEach(function (x) { x.classList.toggle('active', x === b); });
         drawActiveCanvases();
       });
     });
@@ -806,10 +1159,99 @@
   }
 
   /* ------------------------------- Start --------------------------------- */
+  // dark ⇄ light theme (persisted; canvases stay dark "monitors")
+  function initTheme() {
+    const btn = $('btn-theme');
+    const apply = function (t) {
+      document.body.dataset.theme = t;
+      if (btn) btn.textContent = t === 'light' ? '☀️' : '🌙';
+      try { localStorage.setItem('sf-theme', t); } catch (e) { /* ignore */ }
+    };
+    let t = 'dark';
+    try { t = localStorage.getItem('sf-theme') || 'dark'; } catch (e) { /* ignore */ }
+    if (t !== 'light' && t !== 'dark') t = 'dark';
+    if (btn) btn.addEventListener('click', function () {
+      apply(document.body.dataset.theme === 'light' ? 'dark' : 'light');
+    });
+    apply(t);
+  }
+
   async function init() {
     bindTransport();
     bindControls();
     bindAddRegion();
+    initKpiView();
+    initTheme();
+    if (window.SFAsk) SFAsk.init({
+      fetchJSON: fetchJSON,
+      apiFetch: apiFetch,
+      context: askContext,
+      resultSentence: resultSentence,
+    });
+    const speakBtn = $('btn-speak-result');
+    if (speakBtn) speakBtn.addEventListener('click', function () { SFAsk.speakResult(); });
+    const autoChk = $('chk-autospeak');
+    if (autoChk) autoChk.addEventListener('change', function (e) {
+      state.autoSpeak = !!e.target.checked;
+    });
+    const exportBtn = $('btn-export');
+    if (exportBtn) exportBtn.addEventListener('click', function () {
+      const cv = document.getElementById('canvas-main');
+      if (!cv) return;
+      cv.toBlob(function (blob) {          // object-URL: data:-URLs break past ~2 MB
+        if (!blob) return;
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'signalflow-netzwerk.png';
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+      }, 'image/png');
+    });
+    // Knoten-Drilldown: Klick auf einen Signal-Knoten der Karte
+    // (beide Karten — im Modus „Beide" zeigen links Adaptive, rechts Fixed)
+    ['canvas-main', 'canvas-alt'].forEach(function (cid) {
+      const cv = $(cid);
+      if (!cv) return;
+      cv.addEventListener('click', function (ev) {
+        const id = drillHit(cv, ev);
+        if (id) openDrill(id);
+      });
+      cv.addEventListener('mousemove', function (ev) {
+        cv.style.cursor = drillHit(cv, ev) ? 'pointer' : 'default';
+      });
+    });
+    const dclose = $('drill-close');
+    if (dclose) dclose.addEventListener('click', closeDrill);
+    // Overlay an der Kopfzeile verschiebbar machen (PiP-Stil)
+    const drillPanel = $('drill');
+    if (drillPanel) {
+      let dragX = 0, dragY = 0, dragging = false;
+      drillPanel.addEventListener('pointerdown', function (ev) {
+        if (ev.target.closest('#drill-close')) return;
+        dragging = true;
+        dragX = ev.clientX - drillPanel.offsetLeft;
+        dragY = ev.clientY - drillPanel.offsetTop;
+        drillPanel.classList.add('dragging');
+        try { drillPanel.setPointerCapture(ev.pointerId); } catch (e) { /* synthetic events */ }
+      });
+      drillPanel.addEventListener('pointermove', function (ev) {
+        if (!dragging) return;
+        const x = Math.max(8, Math.min(window.innerWidth - drillPanel.offsetWidth - 8,
+                                        ev.clientX - dragX));
+        const y = Math.max(8, Math.min(window.innerHeight - drillPanel.offsetHeight - 8,
+                                        ev.clientY - dragY));
+        drillPanel.style.left = x + 'px';
+        drillPanel.style.top = y + 'px';
+        drillPanel.style.right = 'auto';
+        drillPanel.style.bottom = 'auto';
+      });
+      drillPanel.addEventListener('pointerup', function () {
+        dragging = false;
+        drillPanel.classList.remove('dragging');
+      });
+    }
+    renderBadges();
     requestAnimationFrame(frameLoop);
 
     let data;

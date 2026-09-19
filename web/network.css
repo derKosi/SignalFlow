@@ -9,6 +9,36 @@
 .topbar .nav{ display:flex; align-items:center; gap:10px; }
 .topbar .nav a.btn{ text-decoration:none; }
 
+/* ------------- KPIs (2×3) innerhalb der .dash-Spalte -------------------- */
+/* Grid + sticky Chat-Spalte kommen aus styles.css (.dash/.dash-main/.dash-side);
+   hier nur der Netzwerk-Kniff: 6 Karten als 2×3 statt 5 in einer Reihe. */
+.dash.net .kpi-grid{ grid-template-columns:repeat(3, 1fr); }
+@media (max-width:720px){
+  .dash.net .kpi-grid{ grid-template-columns:repeat(2, 1fr); }
+}
+
+/* --------------------------- Knoten-Drilldown -------------------------- */
+.drill{
+  position:fixed; right:18px; bottom:18px; z-index:40;
+  width:min(430px, calc(100vw - 36px));
+  background: linear-gradient(180deg, var(--panel), var(--bg-2));
+  border:1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  padding:12px 14px 14px;
+}
+/* neben der Chat-Spalte Platz lassen, wenn diese als Spalte steht (>1400px) */
+@media (min-width:1401px){
+  .drill{ right:512px; }   /* komplett links der 400px-Spalte + Abstände */
+}
+.drill-head{ display:flex; align-items:flex-start; justify-content:space-between; gap:10px; margin-bottom:8px; cursor:grab; user-select:none; }
+.drill.dragging{ cursor:grabbing; box-shadow:0 10px 30px rgba(0,0,0,.4); opacity:.97; }
+.drill-head h2{ font-size:14px; }
+.drill-head .panel-sub{ margin:2px 0 0; }
+.drill canvas{
+  display:block; width:100%; aspect-ratio:4 / 3;
+  border:1px solid var(--line-soft); border-radius:10px; background:#0a0e13;
+}
+
 /* --------------------------- Gebiet + Stats ---------------------------- */
 .add-row{ display:flex; gap:8px; align-items:center; }
 .add-row input{ flex:1 1 160px; min-width:120px; padding:6px 9px; border-radius:8px;
@@ -17,7 +47,7 @@
 .run-hint{ font-size:12.5px; color:#f5c451; margin-left:10px; align-self:center; }
 .btn.dirty{ box-shadow:0 0 0 2px rgba(245,196,81,.55); }
 .kpi .row.coordinated b{ color:#f5c451; }
-.kpi .delta.coordinated{ color:#f5c451; border-color:rgba(245,196,81,.35); background:rgba(245,196,81,.08); margin-left:6px; }
+.kpi .delta.coordinated{ color:#f5c451; border-color:rgba(245,196,81,.35); background:rgba(245,196,81,.08); }
 .kpi .row.tuned-est b{ color:#7fd1a8; }
 .kpi .tag[title]{ cursor:help; }
 .region-row{

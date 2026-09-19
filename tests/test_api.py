@@ -249,6 +249,44 @@ class ApiLiveTests(unittest.TestCase):
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(body)["source"], "fallback")
 
+    def test_post_explain_with_network_result_context(self):
+        """The network page sends its on-screen district result; the answer
+        must explain that run, not the last junction run."""
+        net = {"region": "expo_riem", "name": "Neu-Riem",
+               "scenario": {"label": "Normal (Wochentag)"},
+               "summary": {"fixed": {"avg_delay_s": 40.0, "throughput_vph": 3000,
+                                     "avg_travel_time_s": 180.0, "co2_g": 90000,
+                                     "served": 5000},
+                           "adaptive": {"avg_delay_s": 30.0, "throughput_vph": 3100,
+                                        "avg_travel_time_s": 170.0, "co2_g": 70000,
+                                        "served": 5100},
+                           "coordinated": {"avg_delay_s": 33.0}},
+               "improvement": {"avg_delay_pct": 25.0, "throughput_pct": 3.0,
+                               "avg_travel_pct": 5.0, "co2_pct": 22.0}}
+        status, body, _ = _http("POST", self.base + "/api/explain",
+                                {"question": "Was macht adaptiv im Viertel?",
+                                 "result": net})
+        self.assertEqual(status, 200)
+        d = json.loads(body)
+        self.assertEqual(d["source"], "fallback")
+        self.assertIn("Neu-Riem", d["answer"])
+        self.assertIn("green wave", d["answer"])       # coordinated branch
+        self.assertNotIn("wasted green", d["answer"])  # junction template leak
+
+    def test_post_agent_with_network_context(self):
+        """context.kind=network steers the degraded agent to simulate_network."""
+        status, body, _ = _http("POST", self.base + "/api/agent",
+                                {"question": "Was bringt adaptiv hier?",
+                                 "context": {"kind": "network",
+                                             "region": "expo_riem",
+                                             "name": "Neu-Riem",
+                                             "scenario": "Normal"}})
+        self.assertEqual(status, 200)
+        data = json.loads(body)
+        self.assertEqual(data["source"], "fallback")
+        self.assertEqual(data["steps"][0]["tool"], "simulate_network")
+        self.assertEqual(data["steps"][0]["args"].get("region"), "expo_riem")
+
     def test_post_agent_degraded_without_key(self):
         """No Featherless key in the child env: the agent still answers by
         running the simulator itself (deterministic keyword path)."""

@@ -87,6 +87,17 @@ SYSTEM_PROMPT = (
     "Answer in the same language as the operator's question (German question means German answer). "
 )
 
+SYSTEM_PROMPT_NETWORK = (
+    "You are SignalFlow, an explainable adaptive traffic-signal controller "
+    "operating on urban road networks (district level, real OpenStreetMap "
+    "graphs). Answer the operator's question strictly using the provided "
+    "network simulation context (per-policy metrics for the whole district). "
+    "Be concise (max ~140 words), cite concrete numbers, and explain the *why* "
+    "behind differences between policies. Never invent data that is not in "
+    "the context. Answer in the same language as the operator's question "
+    "(German question means German answer). "
+)
+
 
 def build_context(payload: dict, question: str) -> str:
     s = payload.get("summary", {})
@@ -118,16 +129,58 @@ def build_context(payload: dict, question: str) -> str:
     return "\n".join(lines)
 
 
+def build_network_context(payload: dict, question: str) -> str:
+    """Context block for district (network) runs — mirrors network_digest's fields."""
+    summary = payload.get("summary", {})
+    imp = payload.get("improvement", {})
+    scenario = payload.get("scenario") or {}
+    lines = [
+        f"QUESTION: {question}",
+        "",
+        f"NETWORK: {payload.get('name')} (region '{payload.get('region')}')",
+        f"SCENARIO: {scenario.get('label')}",
+        "",
+        "METRICS PER POLICY (whole district):",
+    ]
+    for pol, s in summary.items():
+        if not isinstance(s, dict):
+            continue
+        lines.append(
+            f"- {pol}: avg delay {s.get('avg_delay_s')}s, throughput "
+            f"{s.get('throughput_vph')} veh/h, travel time {s.get('avg_travel_time_s')}s, "
+            f"CO2 {s.get('co2_g')}g, served {s.get('served')} trips"
+        )
+    lines += [
+        "",
+        "IMPROVEMENT (adaptive vs fixed):",
+        f"- avg delay: {imp.get('avg_delay_pct')}%, throughput: {imp.get('throughput_pct')}%, "
+        f"travel time: {imp.get('avg_travel_pct')}%, CO2: {imp.get('co2_pct')}%",
+    ]
+    if isinstance(imp.get("vs_tuned"), dict):
+        lines.append(f"- vs tuned fixed plans: {imp['vs_tuned']}")
+    if isinstance(imp.get("coordinated"), dict):
+        lines.append(f"- coordinated (green wave): {imp['coordinated']}")
+    return "\n".join(lines)
+
+
+def is_network_payload(payload: dict) -> bool:
+    """District results carry a top-level 'region'; junction runs do not."""
+    return isinstance(payload, dict) and "region" in payload
+
+
 def featherless_explain(payload: dict, question: str) -> dict:
     key = _key("FEATHERLESS_API_KEY")
     if not key:
         return {"answer": fallback_explain(payload, question), "source": "fallback",
                 "model": None}
 
+    network = is_network_payload(payload)
     body = {
         "messages": [
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": build_context(payload, question)},
+            {"role": "system",
+             "content": SYSTEM_PROMPT_NETWORK if network else SYSTEM_PROMPT},
+            {"role": "user",
+             "content": (build_network_context if network else build_context)(payload, question)},
         ],
         "temperature": 0.3,
         "max_tokens": 400,
@@ -171,6 +224,8 @@ def featherless_probe(timeout: int = 30) -> dict:
 
 def fallback_explain(payload: dict, question: str) -> str:
     """Deterministic, dependency-free explainer used when Featherless is absent."""
+    if is_network_payload(payload):
+        return _fallback_explain_network(payload, question)
     s = payload.get("summary", {})
     f, a = s.get("fixed", {}), s.get("adaptive", {})
     imp = payload.get("improvement", {})
@@ -196,6 +251,33 @@ def fallback_explain(payload: dict, question: str) -> str:
     parts.append(
         f"Net effect: about {imp.get('co2_pct')}% less idling-related CO2 proxy. "
         f"(Offline explainer — set FEATHERLESS_API_KEY for free-form answers.)"
+    )
+    return "\n".join(parts)
+
+
+def _fallback_explain_network(payload: dict, question: str) -> str:
+    """Deterministic district-level explainer (mirrors the junction template)."""
+    s = payload.get("summary", {})
+    f, a = s.get("fixed", {}), s.get("adaptive", {})
+    imp = payload.get("improvement", {})
+    parts = [
+        f"Q: {question}".strip(),
+        "",
+        f"District '{payload.get('name')}' (region {payload.get('region')}): adaptive "
+        f"signals cut the network-wide average delay from {f.get('avg_delay_s')}s to "
+        f"{a.get('avg_delay_s')}s ({imp.get('avg_delay_pct')}%), shorten average travel "
+        f"time by {imp.get('avg_travel_pct')}% and lower the CO2 proxy by "
+        f"{imp.get('co2_pct')}% versus the fixed-time plans.",
+    ]
+    co = s.get("coordinated")
+    if isinstance(co, dict) and co.get("avg_delay_s") is not None:
+        parts.append(
+            f"The coordinated policy (green wave) reaches {co.get('avg_delay_s')}s average "
+            f"delay — strong on the main corridor, but it follows a fixed offset plan, "
+            f"while the adaptive controller reacts to live queues at every junction."
+        )
+    parts.append(
+        "(Offline explainer — set FEATHERLESS_API_KEY for free-form answers.)"
     )
     return "\n".join(parts)
 

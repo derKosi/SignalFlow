@@ -82,6 +82,9 @@ CONTENT_TYPES = {
 
 # Last simulation result, used as context for /api/explain.
 LAST: dict | None = None
+# Last network (district) result — kept separate so junction and network pages
+# never flip each other's explain/agent context.
+LAST_NETWORK: dict | None = None
 # Small result cache so repeated demo clicks (same config) return instantly.
 CACHE: "OrderedDict[tuple, dict]" = OrderedDict()
 CACHE_MAX = 24
@@ -99,6 +102,22 @@ def cache_put(key, value):
     CACHE.move_to_end(key)
     while len(CACHE) > CACHE_MAX:
         CACHE.popitem(last=False)
+
+
+def _agent_context(ctx) -> tuple:
+    """Map the client-sent page context to (context_hint, last_result).
+
+    The network page sends ``{kind: "network", region, name, scenario}`` so the
+    agent answers for the district currently on screen; anything else keeps the
+    junction context.
+    """
+    if isinstance(ctx, dict) and ctx.get("kind") == "network" and ctx.get("region"):
+        name = f" ({ctx['name']})" if ctx.get("name") else ""
+        scen = f", Szenario {ctx['scenario']}" if ctx.get("scenario") else ""
+        hint = (f"Kontext: Netzwerk-Simulation, Region '{ctx['region']}'{name}{scen}. "
+                "Beantworte die Frage für diese Region (Werkzeug: simulate_network).")
+        return hint, LAST_NETWORK
+    return None, LAST
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -213,7 +232,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def do_POST(self) -> None:
-        global LAST
+        global LAST, LAST_NETWORK
         path = self.path.split("?", 1)[0]
         try:
             if path == "/api/simulate":
@@ -237,6 +256,7 @@ class Handler(BaseHTTPRequestHandler):
                     result = run_region(region, body)
                     disk_put(key, result)
                 cache_put(key, result)
+                LAST_NETWORK = result
                 self._json(200, result)
             elif path == "/api/regions_add":
                 body = self._read_json()
@@ -249,14 +269,20 @@ class Handler(BaseHTTPRequestHandler):
             elif path == "/api/explain":
                 body = self._read_json()
                 question = (body.get("question") or "Explain the controller's behaviour.").strip()
-                ctx = LAST or run_scenario({})
+                # The network page sends its on-screen result as context;
+                # junction flows keep using the server-side LAST run.
+                sent = body.get("result")
+                ctx = sent if isinstance(sent, dict) and sent.get("summary") \
+                    else (LAST or run_scenario({}))
                 self._json(200, featherless_explain(ctx, question))
             elif path == "/api/agent":
                 body = self._read_json()
+                hint, last = _agent_context(body.get("context"))
                 result = run_agent(body.get("question"),
                                    max_rounds=body.get("max_rounds", 3),
                                    mode=body.get("mode", "solo"),
-                                   last_result=LAST)
+                                   last_result=last,
+                                   context_hint=hint)
                 self._json(200, result)
             elif path == "/api/tts":
                 body = self._read_json()

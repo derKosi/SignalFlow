@@ -15,3 +15,6 @@ data/osm/
 
 # Demo result cache (regenerate with tools/precompute.py)
 data/cache/
+
+# Playwright MCP session artifacts (screenshots, transcripts)
+.playwright-mcp/

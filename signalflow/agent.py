@@ -294,8 +294,9 @@ class ToolBox:
             return _err("explain_last", "explain_last takes no arguments")
         if not self.last_result:
             return _err("explain_last", "no simulation has been run yet; use 'simulate' first")
-        return {"ok": True, "tool": "explain_last",
-                **simulate_digest(self.last_result)}
+        digest = network_digest(self.last_result) if "region" in self.last_result \
+            else simulate_digest(self.last_result)
+        return {"ok": True, "tool": "explain_last", **digest}
 
     # -- dispatch -------------------------------------------------------------
     def execute(self, tool: str, args: dict) -> dict:
@@ -520,12 +521,17 @@ def _protocol_loop(llm, messages: list[dict], toolbox: ToolBox, steps: list[dict
 
 def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
               last_result: dict | None = None, use_cache: bool = True,
-              mode: str = "solo") -> dict:
+              mode: str = "solo", context_hint: str | None = None) -> dict:
     """Answer ``question`` by driving the simulator. See module docstring.
 
     ``llm(messages) -> (text, model)`` is injectable for tests; the default is
     ``featherless_chat``. Without a key (or after repeated protocol failures)
     the deterministic keyword path answers instead — degraded but real.
+
+    ``context_hint``: optional operator-context line (e.g. which region the
+    browser is currently showing). It is appended to the question for the LLM
+    and feeds the deterministic keyword scan, and it is part of the answer
+    cache key so answers do not leak across contexts.
 
     ``mode``:
     * ``"solo"``  — one model plans tool calls and answers.
@@ -544,15 +550,20 @@ def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
         raise ValueError(f"max_rounds must be an integer in [1, {MAX_ROUNDS}]")
     if mode not in ("solo", "panel"):
         raise ValueError("mode must be 'solo' or 'panel'")
+    if context_hint is not None and not isinstance(context_hint, str):
+        raise ValueError("context_hint must be a string or None")
+    context_hint = (context_hint or "").strip() or None
+    q_effective = f"{question}\n\n{context_hint}" if context_hint else question
 
-    cache_key = (question.lower(), max_rounds, llm is None, mode)
+    cache_key = (question.lower(), max_rounds, llm is None, mode,
+                 (context_hint or "").lower())
     if use_cache and cache_key in _ANSWER_CACHE:
         _ANSWER_CACHE.move_to_end(cache_key)
         return {**_ANSWER_CACHE[cache_key], "cached": True}
 
     toolbox = ToolBox(last_result)
     if llm is None and not featherless_available():
-        out = _deterministic_answer(question, toolbox)
+        out = _deterministic_answer(q_effective, toolbox)
         out.update({"model": None, "source": "fallback",
                     "note": "no FEATHERLESS_API_KEY; deterministic agent used"})
         _ANSWER_CACHE[cache_key] = out
@@ -560,7 +571,7 @@ def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
 
     llm = llm or featherless_chat
     messages = [{"role": "system", "content": _system_prompt()},
-                {"role": "user", "content": question}]
+                {"role": "user", "content": q_effective}]
     steps: list[dict] = []
     answer, model_used, note = _protocol_loop(llm, messages, toolbox, steps, max_rounds)
 

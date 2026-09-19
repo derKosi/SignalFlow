@@ -42,6 +42,10 @@ with zero runtime dependencies).
 
 ## P2 — after the hackathon
 
+* **Network → junction drilldown**: *built* — clicking a signalised node on the
+  district map opens a junction close-up (true bearings, link queues, real
+  phase colours, synced to playback). Possible upgrades: per-node KPIs and
+  turn-level movements in the drilldown.
 * MAXBAND-style green-wave optimisation instead of fixed travel-time offsets.
 * Roundabout: geometry-based capacity + gap acceptance (Kimber, Song et al.).
 * Close the detector loop (feed as feedback, SCOOT/SCATS-style).

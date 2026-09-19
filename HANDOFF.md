@@ -4,7 +4,7 @@ Everything needed to pick this up cold. **Updated 2026-09-19 (Europe/Berlin).**
 
 * **HEAD:** one clean commit — the 31-commit dev history was squashed before the
   first push (full local history preserved under the git tag `backup-local-history`)
-  · **76 tracked files** · **104/104 tests green**
+  · **76 tracked files** · **108/108 tests green**
 * **Licence:** code = **PolyForm Noncommercial 1.0.0**; OSM-derived data = **ODbL 1.0**
 * **Live integration:** Featherless key is set and working (`.env`, gitignored);
   ElevenLabs not yet.
@@ -46,6 +46,18 @@ node --check web/app.js && node --check web/network.js
 
 Pages: `/` (junction) · `/network.html` (district) · `/writeup.html`.
 Docs are served too: `/docs/*.md`, `/README.md`, `/WRITEUP.md`, `/NOTICE.md`, `/LICENSE`, `/HANDOFF.md`.
+
+Both dashboards share the "Frag SignalFlow" panel (`web/ask.js`, injected page
+context): the junction page sends `{kind:'junction'}`, the network page sends its
+on-screen region — `/api/explain` accepts a client `result`, `/api/agent` a
+`context` hint (server keeps `LAST` / `LAST_NETWORK` separate so the pages never
+flip each other's context). Layout: sticky ask column on the right. KPIs render
+as a transposed matrix table (policies × metrics, traffic-light deltas
+green/orange/red) with a cards ⇄ table toggle. Dark/light theme via the 🌙/☀️
+topbar button (`body[data-theme]`, persisted). The junction canvas draws
+Pkw/Van/Lkw/Bus by the run's `vehicle_mix` and routes roundabout traffic through
+the ring. On the network map, clicking a signalised node opens a junction
+drilldown overlay (true arm bearings north-up, link queues, phase colours).
 
 ## 3. Repo map
 

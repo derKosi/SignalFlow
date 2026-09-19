@@ -7,6 +7,7 @@
 <!-- No external assets: everything is local (.css / .js), works fully offline. -->
 <link rel="stylesheet" href="styles.css" />
 <link rel="stylesheet" href="network.css" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='11' y='3' width='10' height='26' rx='4' fill='%230e1620' stroke='%23243244' stroke-width='1.5'/%3E%3Ccircle cx='16' cy='9' r='2.6' fill='%23ef4444'/%3E%3Ccircle cx='16' cy='16' r='2.6' fill='%23f59e0b'/%3E%3Ccircle cx='16' cy='23' r='2.6' fill='%2322c55e'/%3E%3C/svg%3E" />
 </head>
 <body>
 
@@ -30,16 +31,34 @@
     </div>
   </div>
 
+  <div class="status" aria-label="Verbindungsstatus">
+    <span class="badge" id="badge-featherless" title="Featherless LLM Status">
+      <i class="dot"></i><span class="badge-label">Featherless</span><b class="badge-state">…</b>
+    </span>
+    <span class="badge" id="badge-elevenlabs" title="ElevenLabs TTS Status">
+      <i class="dot"></i><span class="badge-label">ElevenLabs</span><b class="badge-state">…</b>
+    </span>
+  </div>
+
   <div class="nav">
-    <a class="btn ghost" href="index.html">← Einzelkreuzung</a>
+    <a class="btn ghost" href="index.html">Einzelkreuzung</a>
     <a class="btn ghost" href="writeup.html">Writeup</a>
   </div>
+  <button id="btn-theme" class="btn ghost icon" type="button" title="Farbschema wechseln">🌙</button>
+  <button id="btn-speak-result" class="btn ghost" type="button">🔊 Ergebnis vorlesen</button>
+  <button id="btn-export" class="btn ghost" type="button" title="Netzwerkkarte als PNG">⤓ Bild</button>
+  <label class="btn ghost" style="cursor:pointer"><input id="chk-autospeak" type="checkbox" style="vertical-align:middle;margin-right:6px" />Auto-Vorlesen</label>
 </header>
 
 <main id="main">
 
   <!-- Fehler / Offline-Hinweise -->
   <div id="net-error" class="notice error hidden" role="alert"></div>
+
+  <!-- Two-column layout like the junction dashboard: region controls, KPIs,
+       map and charts on the left, the ask panel sticky on the right. -->
+  <div class="dash net">
+  <div class="dash-main">
 
   <!-- ======================= GEBIET + STEUERLEISTE ======================= -->
   <section class="panel" aria-label="Simulationsparameter">
@@ -118,9 +137,19 @@
     </div>
   </section>
 
-  <!-- ========================== KPIs ========================== -->
-  <section class="kpi-grid" id="kpi-grid" aria-label="Kennzahlen">
-    <!-- KPI-Karten werden von network.js erzeugt (IDs bleiben synchron) -->
+  <!-- ========================== KPIs (2×3) ========================== -->
+  <section class="panel kpi-panel" aria-label="Kennzahlen">
+    <div class="kpi-head">
+      <h2>Kennzahlen</h2>
+      <div class="kpi-view" role="group" aria-label="Kennzahl-Ansicht">
+        <button class="kpi-view-btn" data-view="table" type="button" title="Kompakte Matrix">Tabelle</button>
+        <button class="kpi-view-btn" data-view="cards" type="button" title="Status-Karten">Karten</button>
+      </div>
+    </div>
+    <div class="kpi-grid" id="kpi-grid">
+      <!-- KPI-Karten werden von network.js erzeugt (IDs bleiben synchron) -->
+    </div>
+    <div class="kpi-table-wrap" id="kpi-table-wrap" hidden></div>
   </section>
 
   <!-- ====================== CANVAS-KARTE ====================== -->
@@ -187,6 +216,38 @@
       <canvas id="chart-load"></canvas>
     </div>
   </section>
+  </div><!-- /.dash-main -->
+
+  <aside class="dash-side">
+    <section class="panel ask">
+      <h2>Frag SignalFlow</h2>
+      <p class="panel-sub">Agent simuliert selbst · Panel prüft sich selbst (Kritiker + Writer) · Erklären deutet den aktuellen Lauf</p>
+      <div class="modes ask-mode" role="group" aria-label="Antwortmodus">
+        <button class="mode-btn active" id="ask-mode-agent" type="button" title="Agent: plant Tool-Aufrufe und simuliert dafür (ca. 10 s)">🤖 Agent</button>
+        <button class="mode-btn" id="ask-mode-panel" type="button" title="Panel: Analyst, Kritiker und Writer prüfen jede Zahl gegen die Tool-Ergebnisse (ca. 20 s)">🧠 Panel</button>
+        <button class="mode-btn" id="ask-mode-explain" type="button" title="Erklärt den aktuellen Lauf des gezeigten Gebiets (schnell)">💬 Erklären</button>
+      </div>
+      <div class="ask-row">
+        <input id="ask-input" type="text" placeholder="z. B. Was bringt adaptiv in diesem Viertel?" />
+        <button id="ask-send" class="btn primary" type="button">Senden</button>
+      </div>
+      <div class="ask-actions">
+        <button id="ask-speak" class="btn ghost" type="button" title="Antwort vorlesen">🔊 Vorlesen</button>
+        <button id="ask-mic" class="btn ghost" type="button" title="Frage per Mikrofon">🎤 Mikrofon</button>
+      </div>
+      <details id="ask-steps" class="ask-steps" hidden>
+        <summary>Werkzeugspuren des Agenten (<span id="ask-steps-n">0</span>)</summary>
+        <div id="ask-steps-list" class="ask-steps-list"></div>
+      </details>
+      <div class="answer-box">
+        <div class="answer-head">
+          <span class="source-pill" id="ask-source">–</span>
+        </div>
+        <p id="ask-answer" class="answer-text">Noch keine Antwort. Stelle eine Frage zum gezeigten Gebiet.</p>
+      </div>
+    </section>
+  </aside>
+  </div><!-- /.dash -->
 
   <footer class="foot">
     <span id="meta-info">Bereit.</span>
@@ -194,6 +255,19 @@
   </footer>
 </main>
 
+<!-- Knoten-Drilldown: Junction-Ansicht des angeklickten Ampel-Knotens -->
+<aside class="drill" id="drill" hidden aria-label="Knoten-Detailansicht">
+  <div class="drill-head">
+    <div>
+      <h2 id="drill-title">Knoten</h2>
+      <p class="panel-sub" id="drill-sub"></p>
+    </div>
+    <button class="btn ghost icon" id="drill-close" type="button" title="Schließen">✕</button>
+  </div>
+  <canvas id="drill-canvas"></canvas>
+</aside>
+
+<script src="ask.js"></script>
 <script src="network.js"></script>
 </body>
 </html>
