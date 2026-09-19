@@ -1,0 +1,304 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "SignalFlow — Architektur",
+    "output": "architecture-diagram.html",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1140,
+      700
+    ]
+  },
+  "components": [
+    {
+      "id": "osm",
+      "type": "external",
+      "label": "OpenStreetMap",
+      "sublabel": "Nominatim → Overpass",
+      "pos": [
+        30,
+        70
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "echte Netze · ODbL"
+    },
+    {
+      "id": "demand",
+      "type": "external",
+      "label": "Nachfrage-Modell",
+      "sublabel": "Poisson + Tagesgänge",
+      "pos": [
+        30,
+        300
+      ],
+      "size": [
+        150,
+        60
+      ],
+      "tag": "synthetic"
+    },
+    {
+      "id": "sensor",
+      "type": "external",
+      "label": "Sensor-Feed (CSV)",
+      "sublabel": "synth. Stand-in",
+      "pos": [
+        30,
+        520
+      ],
+      "size": [
+        150,
+        60
+      ]
+    },
+    {
+      "id": "district-sim",
+      "type": "backend",
+      "label": "Gebiets-Simulator",
+      "sublabel": "Link-Queue · OD→Tuned*",
+      "pos": [
+        260,
+        70
+      ],
+      "size": [
+        180,
+        70
+      ],
+      "tag": "Fixed · Tuned* · Adaptiv · Welle"
+    },
+    {
+      "id": "junction-sim",
+      "type": "backend",
+      "label": "Kreuzungs-Simulator",
+      "sublabel": "Fixed vs. Max-Pressure",
+      "pos": [
+        260,
+        300
+      ],
+      "size": [
+        180,
+        70
+      ],
+      "tag": "gleicher Seed"
+    },
+    {
+      "id": "server",
+      "type": "backend",
+      "label": "Server (stdlib)",
+      "sublabel": "JSON-API · Cache",
+      "pos": [
+        530,
+        300
+      ],
+      "size": [
+        170,
+        78
+      ],
+      "tag": "zero deps"
+    },
+    {
+      "id": "junction-ui",
+      "type": "frontend",
+      "label": "Kreuzungs-Dashboard",
+      "sublabel": "Animation · KPIs",
+      "pos": [
+        770,
+        70
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "network-ui",
+      "type": "frontend",
+      "label": "Netzwerk-Dashboard",
+      "sublabel": "Karte · Drilldown",
+      "pos": [
+        770,
+        240
+      ],
+      "size": [
+        180,
+        60
+      ]
+    },
+    {
+      "id": "ask-panel",
+      "type": "frontend",
+      "label": "Frag SignalFlow",
+      "sublabel": "ask.js · Agent + TTS",
+      "pos": [
+        770,
+        430
+      ],
+      "size": [
+        180,
+        60
+      ],
+      "tag": "mit TTS"
+    },
+    {
+      "id": "featherless",
+      "type": "external",
+      "label": "Featherless",
+      "sublabel": "LLM-API",
+      "pos": [
+        990,
+        110
+      ],
+      "size": [
+        120,
+        56
+      ],
+      "tag": "optional"
+    },
+    {
+      "id": "elevenlabs",
+      "type": "external",
+      "label": "ElevenLabs",
+      "sublabel": "TTS",
+      "pos": [
+        990,
+        300
+      ],
+      "size": [
+        120,
+        56
+      ],
+      "tag": "optional"
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Simulationskern (signalflow/)",
+      "wraps": [
+        "district-sim",
+        "junction-sim"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Browser",
+      "wraps": [
+        "junction-ui",
+        "network-ui",
+        "ask-panel"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Externe Dienste (optional)",
+      "wraps": [
+        "featherless",
+        "elevenlabs"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "osm-to-district",
+      "from": "osm",
+      "to": "district-sim",
+      "label": "Link-Graph"
+    },
+    {
+      "id": "demand-to-junction",
+      "from": "demand",
+      "to": "junction-sim"
+    },
+    {
+      "id": "demand-to-district",
+      "from": "demand",
+      "to": "district-sim",
+      "label": "Gravitations-OD",
+      "fromSide": "top",
+      "toSide": "left"
+    },
+    {
+      "id": "sensor-to-junction",
+      "from": "sensor",
+      "to": "junction-sim",
+      "variant": "dashed"
+    },
+    {
+      "id": "junction-to-server",
+      "from": "junction-sim",
+      "to": "server",
+      "label": "Frames + KPIs"
+    },
+    {
+      "id": "district-to-server",
+      "from": "district-sim",
+      "to": "server",
+      "label": "4 Kennzahlreihen",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "server-to-junction-ui",
+      "from": "server",
+      "to": "junction-ui"
+    },
+    {
+      "id": "server-to-network-ui",
+      "from": "server",
+      "to": "network-ui"
+    },
+    {
+      "id": "server-to-ask",
+      "from": "server",
+      "to": "ask-panel",
+      "label": "explain · agent · tts",
+      "fromSide": "right",
+      "toSide": "left",
+      "labelDy": 108
+    },
+    {
+      "id": "ask-to-featherless",
+      "from": "ask-panel",
+      "to": "featherless",
+      "variant": "dashed"
+    },
+    {
+      "id": "ask-to-elevenlabs",
+      "from": "ask-panel",
+      "to": "elevenlabs",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "left"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Zwei Ebenen, vier Strategien",
+      "items": [
+        "Kreuzung: Fixed-Time vs. Max-Pressure auf identischem Seed",
+        "Gebiet: Fixed · Tuned* · Adaptiv · Grüne Welle auf echtem OSM-Netz"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "Erklärbarkeit zuerst",
+      "items": [
+        "Jede Zahl aus Simulator-Läufen — Zahlengate im Code",
+        "Ohne API-Keys: deterministischer Offline-Fallback"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "Ehrliche Datenbasis",
+      "items": [
+        "Straßennetze real (OSM)",
+        "Nachfrage, Signalpläne & Sättigungsfluss: dokumentierte Annahmen"
+      ]
+    }
+  ]
+}

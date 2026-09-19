@@ -622,6 +622,19 @@
     <tr><td><b>„Sensor/Camera Feed”</b></td><td>CSV-Zählfeed-Modus (Datei oder URL, Detektor-Dropout) — Herausforderungstext wörtlich erfüllt</td></tr>
   </table>
 
+  <h2>Woher die Daten kommen — Realität vs. Annahme</h2>
+  <p>Für eine Simulation ist jede dieser Annahmen ordnungsgemäß — wir legen sie
+  trotzdem offen:</p>
+  <table>
+    <tr><th>Baustein</th><th>Status</th><th>Quelle / Umgang</th></tr>
+    <tr><td>Straßennetze (6+ Regionen)</td><td><b class="check">real</b></td><td>OpenStreetMap via Overpass (ODbL), arterieller Scope; weitere Orte live in der App nachladbar</td></tr>
+    <tr><td>Fahrzeug-Nachfrage</td><td><b class="cross">Annahme</b></td><td>synthetisch: Gravitations-OD (Gebiet) bzw. Poisson-Raten mit Tagesgang (Kreuzung) — Plausibilitätsregeln, keine Messreihe</td></tr>
+    <tr><td>Signalpläne (Fixed-Baseline)</td><td><b class="cross">Annahme</b></td><td>generischer Handbuch-Plan (36/10/32/8 s bzw. 60-s-Zweiphasen-Takt) — <b>nicht</b> die echten Münchner Schaltpläne</td></tr>
+    <tr><td>Sättigungsfluss &amp; PCE</td><td><b class="cross">Regelwert</b></td><td>1 800 Fz/h/Spur (HCM-Größenordnung: 1 900), unkalibrierte PCE-Tabelle; auch real ±8–10 % (Tarko et al.)</td></tr>
+    <tr><td>Sensor-Feed</td><td><b class="cross">Synthetik</b></td><td>Briefing-Datensatz nicht öffentlich → Stand-in mit gleicher Form; Adapter für echte Detektor-Exporte eingebaut (<code>arrival_csv</code>)</td></tr>
+    <tr><td>Vergleiche (Fixed vs. Rest)</td><td><b class="check">fair</b></td><td>identischer Seed, identische Ankünfte — Unterschiede entstehen ausschließlich durch die Steuerung</td></tr>
+  </table>
+
   <h2>AI-Stack — vollständige Disclosure</h2>
   <div class="aistack">
     <span>Agent-Harness: <b>Claude Code</b></span>

@@ -142,6 +142,19 @@ Each is an ADR in [docs/design-decisions.md](docs/design-decisions.md).
   is implemented (Tuned\*).
 * Pedestrians and cyclists are not modelled.
 
+## Data basis — what is real and what is assumption
+
+Every one of these assumptions is proper for a simulation — we state them openly:
+
+| Ingredient | Status | Source / handling |
+|---|---|---|
+| Street networks (6+ regions) | **real** | OpenStreetMap via Overpass (ODbL); more places loadable live |
+| Vehicle demand | **assumption** | synthetic: gravity OD / Poisson rates with time-of-day profiles — plausibility rules, no measured series |
+| Signal plans (fixed baseline) | **assumption** | generic handbook plan (36/10/32/8 s / 60 s two-phase), **not** Munich's real plans |
+| Saturation flow & PCE | **rule of thumb** | 1 800 veh/h/lane (HCM ballpark 1 900), uncalibrated PCE table; ±8–10 % even in practice (Tarko et al.) |
+| Sensor feed | **synthetic** | briefing dataset not public → same-shape stand-in; adapter for real exports (`arrival_csv`) |
+| Comparisons | **fair** | identical seed and arrivals — differences come only from the control policy |
+
 ## 8. References
 
 > Transparency: this literature grounding was compiled **after** the first

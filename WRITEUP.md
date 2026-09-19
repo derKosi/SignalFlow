@@ -147,6 +147,19 @@ Jedes davon ist ein ADR in [docs/design-decisions.md](docs/design-decisions.md).
   Zählungen ist implementiert (Tuned\*).
 * Fuß- und Radverkehr sind nicht modelliert.
 
+## Datenbasis — was echt ist und was Annahme
+
+Für eine Simulation ist jede dieser Annahmen ordnungsgemäß — wir legen sie offen:
+
+| Baustein | Status | Quelle / Umgang |
+|---|---|---|
+| Straßennetze (6+ Regionen) | **real** | OpenStreetMap via Overpass (ODbL); weitere Orte live nachladbar |
+| Fahrzeug-Nachfrage | **Annahme** | synthetisch: Gravitations-OD bzw. Poisson-Raten mit Tagesgang — Plausibilitätsregeln, keine Messreihe |
+| Signalpläne (Fixed-Baseline) | **Annahme** | generischer Handbuch-Plan (36/10/32/8 s bzw. 60-s-Zweiphasen-Takt), **nicht** die echten Münchner Pläne |
+| Sättigungsfluss & PCE | **Regelwert** | 1 800 Fz/h/Spur (HCM-Größenordnung 1 900), unkalibrierte PCE-Tabelle; auch real ±8–10 % (Tarko et al.) |
+| Sensor-Feed | **Synthetik** | Briefing-Datensatz nicht öffentlich → Stand-in gleicher Form; Adapter für echte Exporte (`arrival_csv`) |
+| Vergleiche | **fair** | identischer Seed und Ankünfte — Unterschiede entstehen nur durch die Steuerung |
+
 ## 8. Literatur
 
 > Transparenz: Diese Literaturverankerung entstand **nach** der ersten
