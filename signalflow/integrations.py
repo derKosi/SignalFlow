@@ -22,18 +22,6 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 ENV_FILE = ROOT / ".env"
 
-FEATHERLESS_BASE = os.environ.get("FEATHERLESS_BASE", "https://api.featherless.ai/v1")
-FEATHERLESS_MODEL = os.environ.get("FEATHERLESS_MODEL", "Qwen/Qwen2.5-7B-Instruct")
-# tried in order if the configured model is unavailable on the account/plan
-FEATHERLESS_FALLBACKS = [
-    "Qwen/Qwen2.5-7B-Instruct",
-    "Qwen/Qwen2.5-14B-Instruct",
-    "mistralai/Mistral-7B-Instruct-v0.3",   # note: Llama/Gemma are gated (HF OAuth)
-]
-ELEVENLABS_BASE = os.environ.get("ELEVENLABS_BASE", "https://api.elevenlabs.io/v1")
-ELEVENLABS_VOICE = os.environ.get("ELEVENLABS_VOICE", "21m00Tcm4TlvDq8ikWAM")  # "Rachel"
-ELEVENLABS_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_multilingual_v2")
-
 
 def load_env() -> None:
     """Load KEY=VALUE pairs from .env into os.environ (does not overwrite)."""
@@ -51,7 +39,21 @@ def load_env() -> None:
         os.environ.setdefault(k, v)
 
 
+# .env MUST be loaded before the constants below read the environment —
+# otherwise FEATHERLESS_MODEL / ELEVENLABS_* silently stay on their defaults
+# while the (lazily read) keys work, which is a confusing half-configured state.
 load_env()
+
+FEATHERLESS_BASE = os.environ.get("FEATHERLESS_BASE", "https://api.featherless.ai/v1")
+FEATHERLESS_MODEL = os.environ.get("FEATHERLESS_MODEL", "Qwen/Qwen2.5-14B-Instruct")
+# tried in order if the configured model is unavailable on the account/plan
+FEATHERLESS_FALLBACKS = [
+    "Qwen/Qwen2.5-7B-Instruct",
+    "mistralai/Mistral-7B-Instruct-v0.3",   # note: Llama/Gemma are gated (HF OAuth)
+]
+ELEVENLABS_BASE = os.environ.get("ELEVENLABS_BASE", "https://api.elevenlabs.io/v1")
+ELEVENLABS_VOICE = os.environ.get("ELEVENLABS_VOICE", "JBFqnCBsd6RMkjVDRZzb")  # "George" (premade)
+ELEVENLABS_MODEL = os.environ.get("ELEVENLABS_MODEL", "eleven_flash_v2_5")
 
 
 def _key(name: str) -> str | None:
@@ -346,20 +348,34 @@ def elevenlabs_tts(text: str) -> tuple[bytes, str]:
 
 
 def elevenlabs_probe(timeout: int = 30) -> dict:
-    """Tiny live key check (used by tools/check_keys.py and GET /api/keys)."""
+    """Tiny live key check (used by tools/check_keys.py and GET /api/keys).
+
+    Some scoped keys may synthesize speech but cannot list voices or read the
+    account — so after the cheap account check fails we verify with a
+    2-character synthesis (the actual capability the app needs).
+    """
     key = _key("ELEVENLABS_API_KEY")
     if not key:
         return {"configured": False}
-    info = {"configured": True, "base": ELEVENLABS_BASE, "voice": ELEVENLABS_VOICE}
+    info = {"configured": True, "base": ELEVENLABS_BASE,
+            "voice": ELEVENLABS_VOICE, "model": ELEVENLABS_MODEL}
+    headers = {"xi-api-key": key, "Accept": "application/json", "User-Agent": USER_AGENT}
     try:
-        req = urllib.request.Request(f"{ELEVENLABS_BASE}/voices",
-                                     headers={"xi-api-key": key, "Accept": "application/json",
-                                              "User-Agent": USER_AGENT})
+        req = urllib.request.Request(f"{ELEVENLABS_BASE}/user", headers=headers)
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read().decode("utf-8"))
+        sub = data.get("subscription", {}) or {}
         info["ok"] = True
-        info["voices"] = len(data.get("voices", []))
-    except Exception as e:  # noqa: BLE001
+        info["tier"] = sub.get("tier")
+        info["characters_left"] = (sub.get("character_limit") or 0) - (sub.get("character_count") or 0)
+        return info
+    except Exception:  # noqa: BLE001 - scoped key, fall through to mini-TTS
+        pass
+    try:
+        audio, _ctype = elevenlabs_tts("OK")
+        info["ok"] = bool(audio)
+        info["probe"] = "mini-tts"
+    except Exception as e:  # noqa: BLE001 - report, never raise
         info["ok"] = False
         info["error"] = f"{type(e).__name__}: {e}"
     return info

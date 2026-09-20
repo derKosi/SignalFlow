@@ -32,6 +32,60 @@
   let opts = null;
   let answer = '';
 
+  // Chat-Verlauf für Follow-up-Fragen (geht mit jeder Anfrage an den Agent)
+  let history = [];
+
+  function chatAppend(role, text, cls) {
+    const box = $('ask-chat');
+    if (!box) return;
+    const hint = box.querySelector('.chat-hint');
+    if (hint) hint.remove();
+    const el = document.createElement('div');
+    el.className = 'msg ' + (cls || role);
+    el.textContent = text;
+    box.appendChild(el);
+    box.scrollTop = box.scrollHeight;
+  }
+
+  function chatReset() {
+    history = [];
+    answer = '';
+    const box = $('ask-chat');
+    if (box) box.innerHTML = '<p class="chat-hint">Noch keine Nachricht. Frage stellen, Chip anklicken oder 🎤 nutzen — Follow-ups bleiben im Kontext.</p>';
+    const src = $('ask-source');
+    if (src) { src.className = 'source-pill'; src.textContent = '–'; }
+    renderAskSteps([], null);
+  }
+
+  function playBlob(url) {
+    const audio = new Audio(url);
+    currentAudio = audio;
+    audio.onended = () => {
+      if (currentAudio === audio) currentAudio = null;
+      URL.revokeObjectURL(url);
+    };
+    audio.play();
+    return audio;
+  }
+
+  // Pause / Weiter / Stopp für die laufende Sprachausgabe (TTS-Audio).
+  // Das Mikrofon startet/stoppet über seinen eigenen Button.
+  function setupAudioControls() {
+    const bind = (id, fn) => {
+      const el = $(id);
+      if (el) el.addEventListener('click', fn);
+    };
+    bind('ask-audio-pause', () => { if (currentAudio) currentAudio.pause(); });
+    bind('ask-audio-resume', () => { if (currentAudio) currentAudio.play(); });
+    bind('ask-audio-stop', () => {
+      if (!currentAudio) return;
+      currentAudio.pause();
+      try { currentAudio.currentTime = 0; } catch (_) { /* stream */ }
+      currentAudio.onended && currentAudio.onended.call(currentAudio);
+      currentAudio = null;
+    });
+  }
+
   // One human-readable line per tool result digest.
   function digestLine(digest) {
     if (!digest) return '';
@@ -96,7 +150,21 @@
   }
 
   // Build (endpoint, body) for the current mode, carrying the page context
-  // so network questions are answered for the district on screen.
+  // so network questions are answered for the district on screen. Follow-up
+  // context: the last turns ride along, capped to ~1000 Zeichen total.
+  function historyForRequest() {
+    const out = [];
+    let budget = 1000;
+    for (let i = history.length - 1; i >= 0 && budget > 0; i--) {
+      const t = history[i];
+      const content = t.content.slice(0, Math.min(t.content.length, budget));
+      if (!content) break;
+      budget -= content.length;
+      out.unshift({ role: t.role, content: content });
+    }
+    return out;
+  }
+
   function askRequest(q) {
     const ctx = (opts.context && opts.context()) || { kind: 'junction' };
     if (askMode === 'explain') {
@@ -105,7 +173,8 @@
       return { endpoint: '/api/explain', body: body };
     }
     const body = { question: q, max_rounds: 3,
-                   mode: askMode === 'panel' ? 'panel' : 'solo' };
+                   mode: askMode === 'panel' ? 'panel' : 'solo',
+                   history: historyForRequest() };
     if (ctx.kind === 'network') {
       body.context = { kind: 'network', region: ctx.region,
                        name: ctx.name, scenario: ctx.scenario };
@@ -114,22 +183,28 @@
   }
 
   async function askExplain() {
-    const q = $('ask-input').value.trim();
+    const input = $('ask-input');
+    const q = (input ? input.value : '').trim();
     if (!q) return;
+    if (input) input.value = '';
+    chatAppend('user', q);
     // locally computed answers first (deterministic, from on-screen data)
     const local = (opts.computeAnswer && opts.computeAnswer(q)) || null;
     if (local) {
       answer = local.answer;
-      $('ask-answer').textContent = answer;
+      chatAppend('bot', answer);
       renderAskSteps(local.steps || [], null);
       const src = $('ask-source');
       src.className = 'source-pill local';
       src.textContent = local.source || 'Analyse · lokal berechnet';
+      history.push({ role: 'user', content: q }, { role: 'assistant', content: answer });
+      history = history.slice(-8);
       return;
     }
     const btn = $('ask-send');
     btn.disabled = true; btn.textContent = 'Denkt…';
-    $('ask-answer').textContent = '…';
+    const think = $('ask-chat');
+    if (think) { const el = document.createElement('div'); el.className = 'msg bot chat-thinking'; el.textContent = '… simuliert'; think.appendChild(el); think.scrollTop = think.scrollHeight; }
     try {
       const req = askRequest(q);
       const res = await opts.fetchJSON(req.endpoint, {
@@ -145,7 +220,10 @@
             ? ' (' + c.issues.join('; ') + ')' : ''));
         extra = (extra ? extra + ' | ' : '') + bits.join(' | ');
       }
-      $('ask-answer').textContent = answer || '(leere Antwort)';
+      const box = $('ask-chat');
+      const thinking = box && box.querySelector('.chat-thinking');
+      if (thinking) thinking.remove();
+      chatAppend('bot', answer || '(leere Antwort)');
       renderAskSteps(res.steps || [], extra);
       const src = $('ask-source');
       const live = res.source === 'featherless';
@@ -155,11 +233,17 @@
         : 'Offline-Fallback')
         + (res.pipeline === 'panel' ? ' · Panel' : '')
         + (res.cached ? ' · Cache' : '');
+      history.push({ role: 'user', content: q },
+                   { role: 'assistant', content: answer });
+      history = history.slice(-8);
     } catch (e) {
+      const box = $('ask-chat');
+      const thinking = box && box.querySelector('.chat-thinking');
+      if (thinking) thinking.remove();
       answer = '';
+      chatAppend('bot', 'Anfrage fehlgeschlagen: ' + e.message +
+        '  (Offline? Backend über http://127.0.0.1:8000 öffnen.)');
       renderAskSteps([], null);
-      $('ask-answer').textContent = 'Anfrage fehlgeschlagen: ' + e.message +
-        '  (Offline? Backend über http://127.0.0.1:8000 öffnen.)';
       const src = $('ask-source'); src.className = 'source-pill'; src.textContent = 'Fehler';
     } finally {
       btn.disabled = false; btn.textContent = 'Senden';
@@ -180,17 +264,14 @@
       if (res.status === 501) {
         let hint = 'TTS nicht konfiguriert.';
         try { const j = await res.json(); if (j && j.hint) hint += ' ' + j.hint; } catch (_) {}
-        $('ask-answer').textContent = hint + '\n\n' + text;
+        chatAppend('bot', hint + '\n\n' + text);
         return;
       }
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
+      playBlob(URL.createObjectURL(blob));
     } catch (e) {
-      $('ask-answer').textContent = 'Vorlesen nicht möglich: ' + e.message + '\n\n' + text;
+      chatAppend('bot', 'Vorlesen nicht möglich: ' + e.message + '\n\n' + text);
     } finally {
       btn.disabled = false; btn.textContent = '🔊 Vorlesen';
     }
@@ -211,10 +292,7 @@
       });
       if (res.status === 501) { alert('Sprachausgabe nicht konfiguriert: ELEVENLABS_API_KEY in .env setzen und Server neu starten.'); return; }
       if (!res.ok) throw new Error('HTTP ' + res.status);
-      const url = URL.createObjectURL(await res.blob());
-      const audio = new Audio(url);
-      audio.onended = () => URL.revokeObjectURL(url);
-      await audio.play();
+      playBlob(URL.createObjectURL(await res.blob()));
     } catch (e) {
       alert('Vorlesen nicht möglich: ' + e.message);
     } finally {
@@ -295,7 +373,11 @@
       if (el) el.addEventListener('click', () => setAskMode(m));
     }
     $('ask-speak').addEventListener('click', speakAnswer);
+    const clr = $('ask-clear');
+    if (clr) clr.addEventListener('click', chatReset);
     setupMic();
+    setupAudioControls();
+    chatReset();                                // Leerzustand + bindings
     setAskMode('agent');
   }
 

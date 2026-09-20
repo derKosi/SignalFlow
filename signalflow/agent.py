@@ -46,6 +46,25 @@ NETWORK_KEYS = {"region", "duration_min", "demand_scenario", "demand_multiplier"
                 "vehicle_mix"}
 JUNCTION_TYPES = ["cross4", "cross4_permissive", "t3", "roundabout"]
 
+MAX_HISTORY_TURNS = 8          # prior turns sent along for follow-up questions
+MAX_HISTORY_CHARS = 800        # per stored turn (answers can be long)
+MAX_HISTORY_TOTAL_CHARS = 1000  # hard budget for the whole carried context
+
+
+def _fill_mix(cfg: dict) -> None:
+    """Interpret a partial ``vehicle_mix`` as "share of total, rest cars".
+
+    A model answer like ``{"truck": 0.15}`` reads naturally as *15 % Lkw* —
+    but the backend renormalises whatever it gets, silently turning that into
+    a 100 %-truck run. Topping up ``car`` keeps the model's intent.
+    """
+    mix = cfg.get("vehicle_mix")
+    if isinstance(mix, dict) and mix and "car" not in mix:
+        total = sum(float(v) for v in mix.values()
+                    if isinstance(v, (int, float)) and not isinstance(v, bool) and v > 0)
+        if 0 < total < 1:
+            mix["car"] = round(1.0 - total, 4)
+
 SYSTEM_PROMPT = """You are SignalFlow's agentic copilot: an explainable adaptive \
 traffic-signal controller for German cities. You answer operator questions by \
 running simulations as tools. Available tools:
@@ -98,23 +117,30 @@ def _system_prompt(mode: str = "solo") -> str:
 # ---------------------------------------------------------------------------
 
 def featherless_chat(messages: list[dict], max_tokens: int = 450) -> tuple[str, str]:
-    """One chat completion. Returns (text, model). Raises on total failure."""
+    """One chat completion. Returns (text, model). Raises on total failure.
+
+    The configured primary model gets one retry — transient Cloudflare/429
+    hiccups should not silently drop the demo to a smaller fallback model.
+    """
     key = _key("FEATHERLESS_API_KEY")
     if not key:
         raise RuntimeError("Featherless not configured")
     headers = {"Authorization": f"Bearer {key}", "Content-Type": "application/json"}
     models = [FEATHERLESS_MODEL] + [m for m in FEATHERLESS_FALLBACKS if m != FEATHERLESS_MODEL]
+    attempts = [(m, 2 if i == 0 else 1) for i, m in enumerate(models)]
     last = None
-    for model in models:
-        try:
-            out = _http_json(f"{FEATHERLESS_BASE}/chat/completions",
-                             {"model": model, "messages": messages,
-                              "temperature": 0.2, "max_tokens": max_tokens}, headers)
-            return out["choices"][0]["message"]["content"].strip(), model
-        except Exception as e:  # noqa: BLE001 - try the next model in the chain
-            last = e
-            if os.environ.get("SIGNALFLOW_DEBUG"):
-                print(f"[agent] model {model} failed: {type(e).__name__}: {e}")
+    for model, tries in attempts:
+        for attempt in range(tries):
+            try:
+                out = _http_json(f"{FEATHERLESS_BASE}/chat/completions",
+                                 {"model": model, "messages": messages,
+                                  "temperature": 0.2, "max_tokens": max_tokens}, headers)
+                return out["choices"][0]["message"]["content"].strip(), model
+            except Exception as e:  # noqa: BLE001 - retry, then next model
+                last = e
+                if os.environ.get("SIGNALFLOW_DEBUG"):
+                    print(f"[agent] model {model} failed "
+                          f"(try {attempt + 1}/{tries}): {type(e).__name__}: {e}")
     raise RuntimeError(f"Featherless call failed: {type(last).__name__}")
 
 
@@ -264,6 +290,7 @@ class ToolBox:
         out = {}
         for k, v in cfg.items():
             out["demand_scenario" if k == "scenario" else k] = v
+        _fill_mix(out)
         return out, None
 
     # -- tools ----------------------------------------------------------------
@@ -280,6 +307,7 @@ class ToolBox:
         cfg, err = self._clean(args, NETWORK_KEYS, "simulate_network")
         if err:
             return err
+        _fill_mix(cfg)
         region = cfg.get("region")
         ids = [r["id"] for r in list_regions()]
         if region not in ids:
@@ -602,9 +630,39 @@ def _protocol_loop(llm, messages: list[dict], toolbox: ToolBox, steps: list[dict
     return None, model_used, "no final answer within the tool budget"
 
 
+def _history_messages(history) -> list[dict]:
+    """Sanitised prior turns for follow-up questions (role + content only).
+
+    Newest turns win: we walk backwards and keep turns until the total
+    character budget (``MAX_HISTORY_TOTAL_CHARS``) is spent.
+    """
+    if not isinstance(history, list):
+        return []
+    cleaned: list[dict] = []
+    for turn in history[-MAX_HISTORY_TURNS:]:
+        if not isinstance(turn, dict):
+            continue
+        role, content = turn.get("role"), turn.get("content")
+        if role not in ("user", "assistant") or not isinstance(content, str):
+            continue
+        content = content.strip()[:MAX_HISTORY_CHARS]
+        if content:
+            cleaned.append({"role": role, "content": content})
+    out: list[dict] = []
+    budget = MAX_HISTORY_TOTAL_CHARS
+    for msg in reversed(cleaned):
+        cost = len(msg["content"])
+        if cost > budget:
+            break
+        budget -= cost
+        out.insert(0, msg)
+    return out
+
+
 def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
               last_result: dict | None = None, use_cache: bool = True,
-              mode: str = "solo", context_hint: str | None = None) -> dict:
+              mode: str = "solo", context_hint: str | None = None,
+              history: list | None = None) -> dict:
     """Answer ``question`` by driving the simulator. See module docstring.
 
     ``llm(messages) -> (text, model)`` is injectable for tests; the default is
@@ -638,9 +696,11 @@ def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
         raise ValueError("context_hint must be a string or None")
     context_hint = (context_hint or "").strip() or None
     q_effective = f"{question}\n\n{context_hint}" if context_hint else question
+    hist_msgs = _history_messages(history)
 
     cache_key = (question.lower(), max_rounds, llm is None, mode,
-                 (context_hint or "").lower())
+                 (context_hint or "").lower(),
+                 tuple((m["role"], m["content"][:100]) for m in hist_msgs))
     if use_cache and cache_key in _ANSWER_CACHE:
         _ANSWER_CACHE.move_to_end(cache_key)
         return {**_ANSWER_CACHE[cache_key], "cached": True}
@@ -654,7 +714,10 @@ def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
         return {**out, "cached": False}
 
     llm = llm or featherless_chat
+    # Prior turns sit between the system prompt and the current question so
+    # follow-ups ("und mit 30 % Lkw?") keep their conversational context.
     messages = [{"role": "system", "content": _system_prompt(mode)},
+                *hist_msgs,
                 {"role": "user", "content": q_effective}]
     steps: list[dict] = []
     answer, model_used, note = _protocol_loop(llm, messages, toolbox, steps, max_rounds)

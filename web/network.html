@@ -315,12 +315,15 @@
         <button class="mode-btn" id="ask-mode-explain" type="button" title="Erklärt den aktuellen Lauf des gezeigten Gebiets (schnell)">💬 Erklären</button>
       </div>
       <div class="ask-row">
-        <input id="ask-input" type="text" placeholder="z. B. Was bringt adaptiv in diesem Viertel?" />
+        <input id="ask-input" type="text" maxlength="80" placeholder="z. B. Was bringt adaptiv in diesem Viertel?" />
         <button id="ask-send" class="btn primary" type="button">Senden</button>
       </div>
       <div class="ask-actions">
         <button id="ask-speak" class="btn ghost" type="button" title="Antwort vorlesen">🔊 Vorlesen</button>
-        <button id="ask-mic" class="btn ghost" type="button" title="Frage per Mikrofon">🎤 Mikrofon</button>
+        <button id="ask-mic" class="btn ghost" type="button" title="Frage per Mikrofon (nochmals klicken = stoppen)">🎤 Mikrofon</button>
+        <button id="ask-audio-pause" class="btn ghost icon" type="button" title="Vorlesen pausieren">⏸</button>
+        <button id="ask-audio-resume" class="btn ghost icon" type="button" title="Vorlesen fortsetzen">▶</button>
+        <button id="ask-audio-stop" class="btn ghost icon" type="button" title="Vorlesen stoppen">⏹</button>
       </div>
       <details id="ask-steps" class="ask-steps" hidden>
         <summary>Werkzeugspuren des Agenten (<span id="ask-steps-n">0</span>)</summary>
@@ -329,8 +332,9 @@
       <div class="answer-box">
         <div class="answer-head">
           <span class="source-pill" id="ask-source">–</span>
+          <button id="ask-clear" class="btn ghost" type="button" title="Chatverlauf löschen — neuer Chat">🧹 Neu</button>
         </div>
-        <p id="ask-answer" class="answer-text">Noch keine Antwort. Stelle eine Frage zum gezeigten Gebiet.</p>
+        <div id="ask-chat" class="chat-box"></div>
       </div>
     </section>
   </aside>

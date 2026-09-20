@@ -333,7 +333,8 @@ class Handler(BaseHTTPRequestHandler):
                                    max_rounds=body.get("max_rounds", 3),
                                    mode=body.get("mode", "solo"),
                                    last_result=last,
-                                   context_hint=hint)
+                                   context_hint=hint,
+                                   history=body.get("history"))
                 self._json(200, result)
             elif path == "/api/tts":
                 body = self._read_json()
