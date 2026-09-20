@@ -918,7 +918,7 @@ class CoordinatedController(FixedTimeController):
             return
         yellow, all_red = int(cfg.fixed_yellow), int(cfg.fixed_all_red)
         lost = len(phases) * (yellow + all_red)
-        available = max(len(phases) * 7, self.cycle - lost)
+        available = max(len(phases) * MIN_GREEN_S, self.cycle - lost)
 
         # axis demand (veh/h): which axis carries the corridor?
         def axis_of(pmoves) -> str:
@@ -927,13 +927,14 @@ class CoordinatedController(FixedTimeController):
         ew = sum(cfg.rate(a, mv) for (a, mv) in cfg.movements() if a in ("E", "W"))
         main_axis = "NS" if ns >= ew else "EW"
 
-        # phase demand, biased toward the coordinated axis, normalised to the cycle
+        # phase demand, biased toward the coordinated axis, normalised to the
+        # cycle; every phase keeps its realistic minimum green
         dem = [sum(cfg.rate(a, mv) for (a, mv) in pmoves) for _, pmoves in phases]
         biased = [d * (self.bias if axis_of(pm) == main_axis else 1.0 / self.bias)
                   for d, (_, pm) in zip(dem, phases)]
         total = sum(biased) or 1.0
-        greens = _int_split([max(7.0, available * b / total) for b in biased],
-                            available, floor=7)
+        greens = _int_split([max(float(MIN_GREEN_S), available * b / total)
+                             for b in biased], available, floor=MIN_GREEN_S)
 
         self.plan = []
         for (pname, pmoves), g in zip(phases, greens):
@@ -960,6 +961,11 @@ class CoordinatedController(FixedTimeController):
 # plan ("Mehrfahrzeitenplan"), not one daily average — counts of each bucket
 # produce their own Webster plan, switched by the clock.
 TUNED_BUCKETS = ((6, 10), (10, 15), (15, 21))
+
+# Realistic minimum green for every phase (RiLSA-Praxis ~10 s vehicles; less
+# would starve side streets and ignore pedestrian crossing + clearance times).
+# Computed plans may never go below this, even under coordination bias.
+MIN_GREEN_S = 10
 
 
 def _tuned_bucket(h: float) -> int:
@@ -1029,13 +1035,13 @@ class TunedController(FixedTimeController):
             y.append(max(ratios) if ratios else 0.0)
         Y = sum(y)
         if Y <= 1e-6:
-            equal = max(len(phases) * 7, 60 - lost) / len(phases)
+            equal = max(len(phases) * MIN_GREEN_S, 60 - lost) / len(phases)
             greens = [int(round(equal))] * len(phases)
         else:
             cycle = int(min(150, max(40, (1.5 * lost + 5) / (1.0 - min(0.95, Y)))))
-            available = max(len(phases) * 6, cycle - lost)
-            greens = _int_split([max(6.0, available * yi / Y) for yi in y],
-                                available, floor=6)
+            available = max(len(phases) * MIN_GREEN_S, cycle - lost)
+            greens = _int_split([max(float(MIN_GREEN_S), available * yi / Y)
+                                 for yi in y], available, floor=MIN_GREEN_S)
         plan = []
         for (pname, pmoves), g in zip(phases, greens):
             plan.append((pname, frozenset(pmoves), "green", int(g)))

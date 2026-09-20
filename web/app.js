@@ -1423,9 +1423,10 @@
         'Tageszeit wird die stärkste Stunde (Spitzenstunde) bestimmt. Daraus folgt je Phase ' +
         'das Flussverhältnis y = Nachfrage / Kapazität; der Webster-Zyklus ' +
         'C = (1,5·L + 5)/(1 − Y) und die Grünverteilung ∝ y ergeben sich direkt daraus — ' +
-        'die Stoßphase bekommt automatisch den größten Grünanteil. Ein eigener Plan je ' +
-        'Tageszeit, weil ein Plan, der zur Rush passt, um 14 Uhr nur verschwendetes Grün ' +
-        'produziert (und umgekehrt).</p>';
+        'die Stoßphase bekommt automatisch den größten Grünanteil. <b>Mindestgrün 10 s je ' +
+        'Phase</b> ist immer garantiert (Fußgänger- und Räumzeiten, kein Sternen von ' +
+        'Nebenrichtungen). Ein eigener Plan je Tageszeit, weil ein Plan, der zur Rush ' +
+        'passt, um 14 Uhr nur verschwendetes Grün produziert (und umgekehrt).</p>';
     } else {
       html += '<table class="plan-table"><thead><tr><th>Phase</th><th>Grün</th></tr></thead><tbody>' +
         phases.map((ph, i) =>
@@ -1742,19 +1743,20 @@
     const fixedGreens = cfg.fixed_greens || [36, 10, 32, 8];
 
     // ---- coordinated: 90 s corridor cycle, bias toward the busier axis ----
+    const MIN_GREEN = 10;      // wie im Backend: realistisches Mindestgrün
     const demOf = (m) => ((cfg.demand[m.split('-')[0]] || {})[m.split('-')[1]]) || 0;
     const axisOf = (ph) => (PHASE_MOVES[ph][0][0] === 'N' || PHASE_MOVES[ph][0][0] === 'S') ? 'NS' : 'EW';
     const axisSum = (ax) => PHASE_ORDER.reduce((s2, ph) =>
       axisOf(ph) === ax ? s2 + PHASE_MOVES[ph].reduce((s3, m) => s3 + demOf(m), 0) : s2, 0);
     const mainAxis = axisSum('NS') >= axisSum('EW') ? 'NS' : 'EW';
     const coordLost = PHASE_ORDER.length * 4;
-    const coordAvail = Math.max(PHASE_ORDER.length * 7, 90 - coordLost);
+    const coordAvail = Math.max(PHASE_ORDER.length * MIN_GREEN, 90 - coordLost);
     const coordDem = PHASE_ORDER.map((ph) =>
       PHASE_MOVES[ph].reduce((s2, m) => s2 + demOf(m), 0) *
       (axisOf(ph) === mainAxis ? 1.25 : 0.8));
     const coordTot = coordDem.reduce((a2, b2) => a2 + b2, 0) || 1;
     const coordGreens = PHASE_ORDER.map((_, i) =>
-      Math.max(7, Math.round(coordAvail * coordDem[i] / coordTot)));
+      Math.max(MIN_GREEN, Math.round(coordAvail * coordDem[i] / coordTot)));
 
     // ---- tuned: Webster splits from the demand counts (demo shortcut) ----
     const crit = PHASE_ORDER.map((ph) => Math.max.apply(null, PHASE_MOVES[ph].map(
@@ -1764,10 +1766,10 @@
     const tunedCycle = Y > 0.01
       ? Math.round(Math.min(150, Math.max(40, (1.5 * tunedLost + 5) / (1 - Math.min(0.95, Y)))))
       : 60;
-    const tunedAvail = Math.max(PHASE_ORDER.length * 6, tunedCycle - tunedLost);
+    const tunedAvail = Math.max(PHASE_ORDER.length * MIN_GREEN, tunedCycle - tunedLost);
     const critTot = crit.reduce((a2, b2) => a2 + b2, 0) || 1;
     const tunedGreens = PHASE_ORDER.map((_, i) =>
-      Math.max(6, Math.round(tunedAvail * crit[i] / critTot)));
+      Math.max(MIN_GREEN, Math.round(tunedAvail * crit[i] / critTot)));
 
     const fixedPlan = planFor(fixedGreens);
     const coordPlan = planFor(coordGreens);
