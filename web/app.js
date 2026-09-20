@@ -83,6 +83,25 @@
     grid: '#1e2a37', axis: '#4a5563', txt: '#8b98a7',
   };
 
+  // Canvas-Farben je Theme: dunkel = Monitor-Look, hell = Papier-Look
+  // (Straßenflächen und Linien hell getönt, Ampel-/Fahrzeugfarben bleiben).
+  function canvasPal() {
+    const light = document.body.dataset.theme === 'light';
+    return light ? {
+      bg: '#f6f4ef', road: '#e5e2da', roadEdge: '#b9b3a7', laneDash: '#a49d8f',
+      box: 'rgba(30,42,54,.55)', roundOuter: '#e0ddd4', roundRing: '#9a938a',
+      roundInner: '#efece5', compass: '#6d675c',
+      chipBg: 'rgba(250,248,243,.92)', chipBorder: '#c7c0b2',
+      phText: 'rgba(13,148,136,1)', tText: 'rgba(90,100,110,.95)',
+    } : {
+      bg: '#0a0e13', road: '#141c25', roadEdge: '#2a3948', laneDash: '#33465a',
+      box: 'rgba(230,237,243,.55)', roundOuter: '#0f1620', roundRing: '#3a4c60',
+      roundInner: '#16202b', compass: '#5d6b7a',
+      chipBg: 'rgba(9,13,18,.78)', chipBorder: '#223040',
+      phText: 'rgba(45,212,191,.85)', tText: 'rgba(139,152,167,.9)',
+    };
+  }
+
   // the compared strategies (colour-consistent with the network dashboard)
   const POLICY_META = [
     { key: 'fixed', label: 'Fixed', color: '#aab6c4',
@@ -530,9 +549,10 @@
   }
 
   function drawIntersection(canvas, frames, pkey) {
+    const pal = canvasPal();
     const { ctx, w, h } = fitCanvas(canvas);
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = '#0a0e13';
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, w, h);
 
     if (!frames || !frames.length) {
@@ -554,14 +574,14 @@
     const hasE = arms.indexOf('E') >= 0, hasW = arms.indexOf('W') >= 0;
 
     // --- roads (only along arms that exist) ---
-    ctx.fillStyle = '#141c25';
+    ctx.fillStyle = pal.road;
     if (hasE || hasW) ctx.fillRect(0, g.cy - g.roadHalf, w, 2 * g.roadHalf);
     if (hasN && hasS) ctx.fillRect(g.cx - g.roadHalf, 0, 2 * g.roadHalf, h);
     else if (hasN) ctx.fillRect(g.cx - g.roadHalf, 0, 2 * g.roadHalf, g.cy + g.roadHalf);
     else if (hasS) ctx.fillRect(g.cx - g.roadHalf, g.cy - g.roadHalf, 2 * g.roadHalf, h - (g.cy - g.roadHalf));
 
     // road edge lines
-    ctx.strokeStyle = '#2a3948'; ctx.lineWidth = 1.5;
+    ctx.strokeStyle = pal.roadEdge; ctx.lineWidth = 1.5;
     if (hasE || hasW) {
       line(ctx, 0, g.cy - g.roadHalf, w, g.cy - g.roadHalf);
       line(ctx, 0, g.cy + g.roadHalf, w, g.cy + g.roadHalf);
@@ -574,15 +594,15 @@
     if (isRound) {
       ctx.beginPath();
       ctx.arc(g.cx, g.cy, g.roadHalf * 0.78, 0, Math.PI * 2);
-      ctx.fillStyle = '#0f1620'; ctx.fill();
-      ctx.strokeStyle = '#3a4c60'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = pal.roundOuter; ctx.fill();
+      ctx.strokeStyle = pal.roundRing; ctx.lineWidth = 2; ctx.stroke();
       ctx.beginPath();
       ctx.arc(g.cx, g.cy, g.roadHalf * 0.40, 0, Math.PI * 2);
-      ctx.fillStyle = '#16202b'; ctx.fill(); ctx.stroke();
+      ctx.fillStyle = pal.roundInner; ctx.fill(); ctx.stroke();
     }
 
     // dashed lane separators (outside the box) + stop lines
-    ctx.setLineDash([7, 7]); ctx.strokeStyle = '#33465a';
+    ctx.setLineDash([7, 7]); ctx.strokeStyle = pal.laneDash;
     if (hasN) line(ctx, g.cx, 0, g.cx, g.cy - g.roadHalf);
     if (hasS) line(ctx, g.cx, g.cy + g.roadHalf, g.cx, h);
     if (hasW) line(ctx, 0, g.cy, g.cx - g.roadHalf, g.cy);
@@ -590,7 +610,7 @@
     ctx.setLineDash([]);
 
     // junction box outline
-    ctx.strokeStyle = 'rgba(230,237,243,.55)'; ctx.lineWidth = 3;
+    ctx.strokeStyle = pal.box; ctx.lineWidth = 3;
     line(ctx, g.cx - g.roadHalf, g.cy - g.roadHalf, g.cx + g.roadHalf, g.cy - g.roadHalf);
     line(ctx, g.cx - g.roadHalf, g.cy + g.roadHalf, g.cx + g.roadHalf, g.cy + g.roadHalf);
     line(ctx, g.cx - g.roadHalf, g.cy - g.roadHalf, g.cx - g.roadHalf, g.cy + g.roadHalf);
@@ -640,7 +660,7 @@
 
     // --- labels & center readout ---
     // compass letters sit beside the road, not on the lane markings
-    ctx.fillStyle = '#5d6b7a'; ctx.font = '600 12px ' + FONT;
+    ctx.fillStyle = pal.compass; ctx.font = '600 12px ' + FONT;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('N', g.cx - g.roadHalf - 18, 14);
     ctx.fillText('S', g.cx - g.roadHalf - 18, h - 14);
@@ -655,14 +675,14 @@
     ctx.font = '10px ' + FONT;
     const chipW = rw + 20, chipH = 34;
     const chipX = g.cx, chipY = g.cy + g.roadHalf * 0.55 + 7;
-    ctx.fillStyle = 'rgba(9,13,18,.78)';
-    ctx.strokeStyle = '#223040'; ctx.lineWidth = 1;
+    ctx.fillStyle = pal.chipBg;
+    ctx.strokeStyle = pal.chipBorder; ctx.lineWidth = 1;
     rr(ctx, chipX - chipW / 2, chipY - chipH / 2, chipW, chipH, 8);
     ctx.fill(); ctx.stroke();
-    ctx.fillStyle = 'rgba(45,212,191,.85)';
+    ctx.fillStyle = pal.phText;
     ctx.font = '600 11px ' + FONT;
     ctx.fillText(phText, chipX, chipY - 7);
-    ctx.fillStyle = 'rgba(139,152,167,.9)';
+    ctx.fillStyle = pal.tText;
     ctx.font = '10px ' + FONT;
     ctx.fillText(tText, chipX, chipY + 8);
     void pkey;
@@ -1610,7 +1630,14 @@
 
   function updateSpeedReadout() {
     const el = document.getElementById('speed-readout');
-    if (el) el.textContent = fmt(state.speed, 0) + '×';
+    if (!el) return;
+    // Sim-Sekunden je Echtzeit-Sekunde — menschlich ausgedrückt
+    const r = state.speed;
+    const txt = r >= 120 ? '≈ ' + fmt(r / 60, 1) + ' min/s' : '≈ ' + fmt(r, 0) + ' s/s';
+    el.textContent = txt;
+    el.title = 'Wiedergabetempo: 1 Sekunde Echtzeit ≈ ' +
+      (r >= 120 ? fmt(r / 60, 1) + ' Minuten' : fmt(r, 0) + ' Sekunden') +
+      ' Simulation (Faktor ' + fmt(r, 0) + '×)';
   }
 
   function updateProgress() {
@@ -2042,13 +2069,17 @@
       b.title = avail ? b.title : 'Für den Kreisverkehr-Vergleich nicht vorhanden';
     });
   }
-  // dark ⇄ light theme (persisted; canvases stay dark "monitors")
+  // dark ⇄ light theme (persisted); die Karten folgen dem Theme
   function initTheme() {
     const btn = $('btn-theme');
     const apply = (t) => {
       document.body.dataset.theme = t;
       if (btn) btn.textContent = t === 'light' ? '☀️' : '🌙';
       try { localStorage.setItem('sf-theme', t); } catch (_) {}
+      if (state.result) {          // Canvas-Neuzeichnen im neuen Look
+        drawActiveCanvases();
+        renderCharts();
+      }
     };
     let t = 'dark';
     try { t = localStorage.getItem('sf-theme') || 'dark'; } catch (_) {}

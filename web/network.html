@@ -75,16 +75,19 @@
     <div class="ctl-group">
       <h3>Gebiet <span class="grp-sub">echte OpenStreetMap-Netze</span></h3>
       <div class="ctl-grid ctl-grid-region">
-        <div class="control region-control">
+        <div class="control">
           <label for="ctl-region">Gebiet</label>
           <select id="ctl-region" aria-label="Region"></select>
-          <input id="region-filter" type="text" placeholder="Liste filtern …" aria-label="Gebiete filtern" title="Filtert die Gebietsliste — nützlich, sobald per „Ort hinzufügen“ mehr Einträge entstehen" />
+        </div>
+        <div class="control">
+          <label for="region-filter">Liste filtern</label>
+          <input id="region-filter" type="text" placeholder="z. B. München, Tübingen …" aria-label="Gebiete filtern" title="Filtert die Gebietsliste — nützlich, sobald per „Ort hinzufügen“ mehr Einträge entstehen" />
           <span id="region-filter-hint" class="desc"></span>
         </div>
         <div class="control add-region">
           <label for="add-place">Ort hinzufügen (OpenStreetMap)</label>
           <div class="add-row">
-            <input id="add-place" type="text" placeholder="z. B. Tübingen Zentrum" />
+            <input id="add-place" type="text" placeholder="z. B. Bonn Zentrum" />
             <button id="btn-add-region" class="btn ghost" type="button">Hinzufügen</button>
           </div>
           <span id="add-status" class="run-hint"></span>
@@ -213,6 +216,7 @@
           <button class="speed-btn active" data-speed="1" type="button">1×</button>
           <button class="speed-btn" data-speed="2" type="button">2×</button>
           <button class="speed-btn" data-speed="4" type="button">4×</button>
+          <span id="speed-readout" class="pill mono" title="Wiedergabetempo">–</span>
         </div>
 
         <button id="btn-osm" class="btn ghost icon" type="button" title="Echte OSM-Karte halbtransparent unter das Netz legen (© OpenStreetMap-Mitwirkende; braucht Internet — offline bleibt die Karte dunkel)">🗺️</button>

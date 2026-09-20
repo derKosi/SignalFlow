@@ -51,6 +51,30 @@ def _cache_key(path: str, payload: dict) -> str:
     return h[:24]
 
 
+# Demo-Rate-Limit für die kostenpflichtigen Endpunkte: Tester an einem
+# Demo-Laptop können damit den Sponsor-Kontingenten nicht auf den Grund gehen.
+# Fenster ist bewusst grob (Sliding Window über Zeitstempel im RAM).
+_RATE_WINDOW_S = 60.0
+_RATE_LIMITS = {"/api/agent": 12, "/api/explain": 20, "/api/tts": 8,
+                "/api/regions_add": 4}
+_rate_hits: dict = {}
+
+
+def _rate_ok(path: str) -> bool:
+    limit = _RATE_LIMITS.get(path)
+    if not limit:
+        return True
+    import time
+    now = time.monotonic()
+    hits = [t for t in _rate_hits.get(path, []) if now - t < _RATE_WINDOW_S]
+    if len(hits) >= limit:
+        _rate_hits[path] = hits
+        return False
+    hits.append(now)
+    _rate_hits[path] = hits
+    return True
+
+
 HOST = os.environ.get("SIGNALFLOW_HOST", "127.0.0.1")
 PORT = int(os.environ.get("SIGNALFLOW_PORT", "8000"))
 
@@ -255,6 +279,10 @@ class Handler(BaseHTTPRequestHandler):
         global LAST, LAST_NETWORK
         path = self.path.split("?", 1)[0]
         try:
+            if not _rate_ok(path):
+                self._json(429, {"error": "Rate limit: kurz warten und erneut versuchen "
+                                          "(Demo-Schutz der Sponsor-Kontingente)"})
+                return
             if path == "/api/simulate":
                 cfg = self._read_json()
                 key = _cache_key(path, cfg)

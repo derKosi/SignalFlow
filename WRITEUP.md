@@ -25,8 +25,9 @@ den Gewinn zeigt. Darin stecken zwei Fallen: ein System, das Anpassung nur
 
 SignalFlow umgeht beide: Es schickt den **selben Verkehr** (gleicher Seed)
 durch einen festen Plan und einen adaptiven Controller — nebeneinander,
-Bild für Bild. Und es skaliert vom Einzelknoten bis auf **sechs echte
-deutsche Stadtteilnetze**.
+Bild für Bild. Und es skaliert vom Einzelknoten bis auf **neun echte
+deutsche Stadtteilnetze** (weitere per „Ort hinzufügen“ live aus
+OpenStreetMap ladbar).
 
 ## 2. Die vier Strategien — und wie sie sich unterscheiden
 
@@ -44,15 +45,66 @@ Merksatz: **Adaptiv gewinnt fast überall — aber nicht immer gegen einen Plan,
 der aus echten Daten gelernt hat. Und genau das zeigen wir, statt es
 wegzulassen.**
 
-## 3. Wie die Simulation grob funktioniert
+## 3. Architektur — von der Karte bis zur Antwort
+
+### 3.1 Bausteine & Datenfluss
+
+SignalFlow ist **ein Python-Prozess (nur Standardbibliothek) plus zwei
+statische Dashboards** — keine Installation, kein Build, kein CDN (ADR 1,
+[docs/design-decisions.md](docs/design-decisions.md)). Alles läuft daher auf
+einem Jury-Laptop mit einem Befehl:
+
+| Schicht | Baustein | Aufgabe |
+|---|---|---|
+| **Daten** | `data/regions/*.json` | kompilierte OSM-Graphen (committed, ODbL) — die Demo hängt nicht an einem Live-Overpass |
+| **Simulationskerne** | `signalflow/simulation.py` · `network.py` | Kreuzungs- vs. Gebietsmodell (§3.2); je vier bzw. fünf Strategien auf identischem Verkehr |
+| **API** | `server.py` | statische Dateien + JSON-Endpunkte; Ergebnis-Cache (RAM + Disk, Schlüssel = Anfrage-Hash), `SIM_LOCK` serialisiert schwere Läufe (5 parallele Clients getestet) |
+| **Erklärbarkeit** | `signalflow/agent.py` · `integrations.py` | Explain/Agent/TTS mit deterministischen Offline-Fallbacks und Anti-Halluzinations-Gate (§5) |
+| **Frontend** | `web/` | zwei Dashboards in gleicher visueller Sprache: Strategie-Toggles, KPI-Matrix, Verlauf + Uhrzeit-Zoom, Entscheidungsprotokoll, Knoten-Drilldown |
+
+Der Datenfluss im Überblick (vollständiges Diagramm:
+[docs/architecture.svg](docs/architecture.svg) ·
+[docs/architecture.md](docs/architecture.md)):
+
+```
+ OpenStreetMap (Overpass) ──► data/regions/*.json ──► network.py ──┐
+ Nachfrage: Poisson-Modell oder Sensor-CSV ──► simulation.py ──────┤
+                                                                   ▼
+        ┌──────────────────────── server.py ────────────────────────┐
+        │  Cache (RAM + Disk) · SIM_LOCK · LAST / LAST_NETWORK      │
+        └───────────────────────────────────────────────────────────┘
+          ▲                    ▲                    ▲
+   POST /api/simulate   POST /api/simulate_network   POST /api/agent
+   GET  /api/config     GET  /api/regions            POST /api/explain · /api/tts
+          ▲                    ▲                    ▲
+   Kreuzungs-Dashboard   Netzwerk-Dashboard      Featherless (LLM) · ElevenLabs (TTS)
+```
+
+Zwei Details, die im Demo-Moment wichtig sind: Die Dashboards sind **statische
+Dateien**, die relative URLs aufrufen — es gibt kein Build-/CORS-Problem; und
+der Server hält das letzte Ergebnis je Seite (`LAST` / `LAST_NETWORK`) separat,
+sodass der LLM-Agent immer **den Lauf erklärt, der gerade auf dem Bildschirm
+steht**, auch wenn beide Dashboards offen sind.
+
+### 3.2 Fairer Vergleich als Architektur-Prinzip
+
+Der Vierkampf aus §2 ist keine Präsentationsentscheidung, sondern im Kern
+verankert: `run_scenario` (Kreuzung) und `run_region` (Gebiet) erzeugen **eine**
+Ankunftsreihe aus dem Seed und führen alle Strategien dagegen aus —
+die Unterschiede in den Kennzahlen können nur von der Steuerung stammen.
+Beide Funktionen sind reine Funktionen von `(Konfiguration, Seed)`: zweimal
+laufen liefert bitidentische Zahlen (im Testfest verankert). Der Disk-Cache
+macht wiederholte Demo-Läufe sofort, Warmlaufzeiten vor dem Zeitfenster
+(15 min Kreuzung / 5 min Gebiet) werden nicht gewertet.
+
+### 3.3 Die beiden Simulationskerne
 
 **Einzelkreuzung.** Ein diskretes Warteschlangenmodell mit 1-Sekunden-Takt:
 vier Zufahrten × (links / gerade / rechts) = 12 Bewegungen, Poisson-Ankünfte
 mit Tagesgang (Berufsverkehr, Ferien, Wochenende), Abfertigung mit
 Sättigungsfluss (1 800 Fz/h/Spur, PCE-gewichtet für Lkw/Bus), vier geschützte
 Phasen. Verzögerung = Σ Schlange · dt; der CO₂-Wert ist ein Proxy aus
-Standzeit. Beide Controller sehen **dieselbe Ankunftsreihe** — der Vergleich
-ist Äpfel mit Äpfeln.
+Standzeit.
 
 **Stadtteil.** Ein mesoskopisches **Link-Queue-Modell** auf dem echten
 OSM-Graphen: Jeder gerichtete Link hat einen Fahrzeit-Bucket und eine
@@ -62,9 +114,10 @@ Gravitations-OD-Matrix, geroutet mit Dijkstra; Abbiegeanteile und ein
 Exit-Share pro Link verteilen und beenden die Fahrten. Grundplan: fester
 60-s-Zweiphasenzyklus; Alternative: Max-Pressure **pro Knoten**; die Grüne
 Welle legt auf den längsten Korridoren gemeinsamen Zyklus und
-Fahrzeit-Offsets (× 0,95). Netzwerke: **Messe/ICM Riem** (355 Knoten / 569
-Links / 58 Signale), **Altstadtring** (2597 / 4159 / 708) sowie Berlin Mitte,
-Hamburg Innenstadt, Köln und Heidelberg — live per OSM-Overpass
+Fahrzeit-Offsets (× 0,95); Tuned\* tunt die Splits aus Zählungen (§4).
+Netzwerke: **Messe/ICM Riem** (355 Knoten / 569 Links / 58 Signale),
+**Altstadtring** (2597 / 4159 / 708) sowie Berlin Mitte, Hamburg Innenstadt,
+Köln, Heidelberg und mehr — weitere Regionen live per OSM-Overpass
 nachladbar.
 
 ## 4. Ergebnisse
@@ -81,37 +134,47 @@ nachladbar.
 Über eine Last-Sweep (0,8–1,1×): mittlere Verzögerungs-Reduktion **39,9 %**
 (54,8 % unbelastet, 16 % übersättigt).
 
-**Stadtteil** (15 min Peak, echte OSM-Netze):
+**Stadtteil** (15 min Peak, echte OSM-Netze; Spalte Tuned\* = Zähl-basierte
+Variante, [docs/results.md](docs/results.md) §3.1):
 
-| Region | Signale | Fixed | Adaptiv | Koord. (Welle) |
-|---|---:|---:|---:|---:|
-| München — Messe/ICM Riem | 58 | 184,8 s | 92,9 s | **70,5 s (−61,9 %)** |
-| München — Altstadtring | 708 | 266,5 s | **94,2 s (−64,6 %)** | 111,0 s |
-| Berlin — Mitte | 204 | 189,1 s | **68,9 s (−63,6 %)** | 69,8 s |
-| Hamburg — Innenstadt | 173 | 109,5 s | 38,4 s | **38,2 s (−65,1 %)** |
-| Köln — Innenstadt | 102 | 150,6 s | **47,4 s (−68,5 %)** | 58,0 s |
-| Heidelberg — Uni | 81 | 236,3 s | **44,5 s (−81,2 %)** | 75,5 s |
+| Region | Signale | Fixed | Adaptiv | Koord. (Welle) | Tuned\* (aus Zählungen) |
+|---|---:|---:|---:|---:|---:|
+| München — Messe/ICM Riem | 58 | 184,8 s | 92,9 s | **70,5 s (−61,9 %)** | 105,7 s (−42,8 %) |
+| München — Altstadtring | 708 | 266,5 s | 94,2 s (−64,6 %) | 111,0 s | **81,4 s (−69,5 %)** |
+| Berlin — Mitte | 204 | 189,1 s | 68,9 s (−63,6 %) | 69,8 s | **57,2 s (−69,8 %)** |
+| Hamburg — Innenstadt | 173 | 109,5 s | 38,4 s | 38,2 s (−65,1 %) | **28,3 s (−74,2 %)** |
+| Köln — Innenstadt | 102 | 150,6 s | **47,4 s (−68,5 %)** | 58,0 s | 48,9 s (−67,5 %) |
+| Heidelberg — Uni | 81 | 236,3 s | 44,5 s (−81,2 %) | 75,5 s | **39,9 s (−83,1 %)** |
 
-**Ehrlichkeits-Kasten.** Der Detektor-Plan **Tuned\*** gewinnt auf
-kurzmaschigen Grids (Berlin, Hamburg) sogar gegen Adaptiv; mit zyklusbasiertem
-Webster-Ansatz schlägt Adaptiv auf Riem (+8,2 %) und Köln (+2,5 %) erstmals
-sogar den Orakel-Plan. Diese Befunde stehen unverändert in
-[docs/results.md](docs/results.md) — starke Baselines und gezeigte Niederlagen
-gehören zur Ehrlichkeit dazu.
+**Ehrlichkeits-Kasten.** Die Tabelle zeigt ihn live: Der Detektor-Plan
+**Tuned\*** gewinnt auf vier von sechs Netzen (Altstadtring, Berlin, Hamburg,
+Heidelberg) — und das aus einer **Schätzung**, nicht aus der wahren Nachfrage:
+80–100 % des Orakel-Gewinns werden aus reinen Zählungen zurückgewonnen
+([docs/results.md](docs/results.md) §3.1). Mit zyklusbasiertem Webster-Ansatz
+schlägt Adaptiv auf Riem (+8,2 %) und Köln (+2,5 %) erstmals sogar den
+Orakel-Plan (§3.2 dort). Starke Baselines und gezeigte Niederlagen gehören zur
+Ehrlichkeit dazu — Adaptiv gewinnt im Tagesmittel, aber nicht immer und nicht
+überall.
 
 ## 5. Erklärbarkeit
 
-Jeder Phasenwechsel wird mit seinen Drücken protokolliert; `/api/explain`
-macht das Protokoll zu Prosa (Featherless, OpenAI-kompatibel), `/api/tts`
-liest es vor (ElevenLabs) — ohne Keys antwortet ein deterministischer
-Offline-Erklärer und die Stimme bleibt aus. Darüber hinaus ist **`/api/agent`
-agentic**: Er plant Tool-Aufrufe (`simulate`, `simulate_network`, `compare`,
-`explain_last`) über ein provider-portables Protokoll, führt sie gegen den
-echten Simulator aus und zeigt die komplette Spur in der UI — Antworten
-kommen aus Läufen, nicht aus der Phantasie des Modells. Ein
-**Drei-Rollen-Selbstcheck** (`mode:"panel"`) geht weiter: Analyst → Kritiker
-(prüft Zahlen *und* die Prämissen der Frage) → Writer, mit einer
-Anti-Halluzinations-Regel, die im Code durchgesetzt wird.
+Erklärbarkeit beginnt im Dashboard, nicht beim LLM: Am Einzelknoten wird jeder
+Phasenwechsel mit Begründung und Drücken protokolliert; im Gebiet zeigt das
+Protokoll die Top-Stau-Links (Klick öffnet die Kreuzungs-Ansicht) und je
+Strategie ihren Plan — der Fixplan, die Korridor-Offsets der grünen Welle,
+die Güte der OD-Schätzung hinter Tuned\*. Die Kennzahlen-Matrix zeigt jede
+Verbesserung *und* jede Niederlage gegen Fixed.
+
+Darüber hinaus: `/api/explain` macht das Protokoll zu Prosa (Featherless,
+OpenAI-kompatibel), `/api/tts` liest es vor (ElevenLabs) — ohne Keys antwortet
+ein deterministischer Offline-Erklärer und die Stimme bleibt aus. Und
+**`/api/agent` ist agentic**: Er plant Tool-Aufrufe (`simulate`,
+`simulate_network`, `compare`, `explain_last`) über ein provider-portables
+Protokoll, führt sie gegen den echten Simulator aus und zeigt die komplette
+Spur in der UI — Antworten kommen aus Läufen, nicht aus der Phantasie des
+Modells. Ein **Drei-Rollen-Selbstcheck** (`mode:"panel"`) geht weiter:
+Analyst → Kritiker (prüft Zahlen *und* die Prämissen der Frage) → Writer, mit
+einer Anti-Halluzinations-Regel, die im Code durchgesetzt wird.
 
 ## 6. Die Engineering-Story (was wirklich Zeit gekostet hat)
 
@@ -238,7 +301,7 @@ sowie an das MunichTech-EXPO-Team.
 
 ```bash
 python3 server.py        # oder ./run.sh  →  http://127.0.0.1:8000
-python3 -m unittest discover -s tests     # 108/108 grün
+python3 -m unittest discover -s tests     # 116/116 grün
 ```
 
 | Wohin? | Was du dort findest |

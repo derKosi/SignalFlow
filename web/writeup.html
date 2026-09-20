@@ -6,14 +6,21 @@
 <title>SignalFlow — Writeup</title>
 <style>
   :root{ --bg:#0b1220; --panel:#131c2b; --panel2:#0f2233; --line:#243244; --ink:#e2e8f0;
-         --mut:#94a3b8; --mut2:#64748b; --acc:#38bdf8; --acc2:#7dd3fc; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; }
+         --mut:#94a3b8; --mut2:#64748b; --acc:#38bdf8; --acc2:#7dd3fc; --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+         --ink-soft:#cbd5e1; --code-bg:#0d1626; --pill-border:#1e3a52;
+         --head-a:rgba(11,18,32,.96); --head-b:rgba(11,18,32,.86); }
+  body[data-theme="light"]{
+    --bg:#eef2f7; --panel:#ffffff; --panel2:#f1f5fa; --line:#d3dce7; --ink:#182430;
+    --mut:#5b6b7d; --mut2:#8798aa; --acc:#0369a1; --acc2:#0369a1;
+    --ink-soft:#33475c; --code-bg:#e7edf4; --pill-border:#c5d5e4;
+    --head-a:rgba(255,255,255,.96); --head-b:rgba(255,255,255,.86); }
   *{box-sizing:border-box}
   html,body{margin:0;background:var(--bg);color:var(--ink);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;line-height:1.6}
   a{color:var(--acc2);text-decoration:none} a:hover{text-decoration:underline}
   .wrap{max-width:1080px;margin:0 auto;padding:0 22px 80px}
-  header.top{display:flex;align-items:center;gap:14px;padding:22px 0;border-bottom:1px solid var(--line);
-    position:sticky;top:0;background:linear-gradient(180deg,rgba(11,18,32,.96),rgba(11,18,32,.86));
+  header.top{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--line);
+    position:sticky;top:0;background:linear-gradient(180deg,var(--head-a),var(--head-b));
     backdrop-filter:blur(6px);z-index:10}
   .logo{width:30px;height:30px}
   .brand{font-weight:700;font-size:19px;letter-spacing:.2px}
@@ -23,7 +30,7 @@
   h1{font-size:34px;line-height:1.2;margin:38px 0 8px}
   h2{font-size:22px;margin:44px 0 10px;padding-top:10px;border-top:1px solid var(--line)}
   h3{font-size:16px;margin:24px 0 6px;color:var(--acc2)}
-  p{color:#cbd5e1}
+  p{color:var(--ink-soft)}
   .lede{font-size:18px;color:var(--mut)}
   .kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:14px;margin:26px 0}
   .kpi{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
@@ -36,19 +43,33 @@
   td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
   .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin:16px 0}
   .panel.accent{border-color:var(--acc)}
-  .pill{display:inline-block;font-size:12px;color:var(--acc2);border:1px solid #1e3a52;background:var(--panel2);
+  .pill{display:inline-block;font-size:12px;color:var(--acc2);border:1px solid var(--pill-border);background:var(--panel2);
     padding:2px 9px;border-radius:999px;margin-right:6px}
   .cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
   @media(max-width:760px){.cols{grid-template-columns:1fr}}
   ol.story{padding-left:20px} ol.story li{margin:10px 0}
   ul.lit{padding-left:20px} ul.lit li{margin:12px 0}
   ul.lit b{color:var(--ink)}
-  code{background:#0d1626;border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
+  code{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px}
   .links{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px}
   .links a{display:block;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;color:var(--ink)}
   .links a:hover{border-color:var(--acc);text-decoration:none}
   .links a span{display:block;color:var(--mut);font-size:12.5px;margin-top:2px}
   footer{color:var(--mut2);font-size:13px;border-top:1px solid var(--line);margin-top:44px;padding-top:16px}
+  .status{display:flex;gap:10px;flex-wrap:wrap;margin-left:auto}
+  .badge{display:inline-flex;align-items:center;gap:7px;padding:6px 11px;border-radius:999px;
+    background:var(--panel);border:1px solid var(--line);font-size:12.5px;color:var(--mut);white-space:nowrap}
+  .badge b{color:var(--ink);font-weight:600}
+  .badge .dot{width:8px;height:8px;border-radius:50%;background:var(--mut2);transition:.2s}
+  .badge.ok .dot{background:var(--ok);box-shadow:0 0 10px rgba(34,197,94,.8)}
+  .badge.off .dot{background:var(--warn);box-shadow:0 0 10px rgba(245,158,11,.7)}
+  .badge.err .dot{background:var(--bad)}
+  .badge.ok b{color:var(--ok)} .badge.off b{color:var(--warn)} .badge.err b{color:var(--bad)}
+  .nav{margin-left:0}
+  .tbtn{font:inherit;font-size:15px;cursor:pointer;background:var(--panel);border:1px solid var(--line);
+    color:var(--ink);border-radius:9px;padding:6px 13px}
+  .tbtn:hover{border-color:var(--acc)}
+  @media(max-width:900px){.status{display:none}}
   .tag{color:var(--mut2);font-size:13px}
   .vswitch{display:flex;gap:8px;flex-wrap:wrap;margin:20px 0 4px}
   .vbtn{font:inherit;font-size:13px;color:var(--mut);background:var(--panel);border:1px solid var(--line);
@@ -64,9 +85,7 @@
   .sponsors{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin:18px 0}
   .sponsor{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px}
   .sponsor h3{margin:0 0 6px}
-  .sponsor .where{font-size:13px;color:#cbd5e1}
-  .sponsor .award{display:inline-block;font-size:12px;color:#ffd77a;border:1px solid #4a3d1e;background:#241d0e;
-    padding:2px 9px;border-radius:999px;margin-top:8px}
+  .sponsor .where{font-size:13px;color:var(--ink-soft)}
   .aistack{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}
   .aistack span{display:inline-block;font-size:13px;color:var(--ink);border:1px solid var(--line);
     background:var(--panel2);border-radius:10px;padding:6px 12px}
@@ -84,11 +103,16 @@
   <header class="top">
     <svg class="logo" viewBox="0 0 32 32"><rect x="11" y="3" width="10" height="26" rx="4" fill="#0e1620" stroke="#243244" stroke-width="1.5"/><circle cx="16" cy="9" r="2.6" fill="#ef4444"/><circle cx="16" cy="16" r="2.6" fill="#f59e0b"/><circle cx="16" cy="23" r="2.6" fill="#22c55e"/></svg>
     <div class="brand">SignalFlow <small>Adaptive, explainable traffic-signal control</small></div>
+    <div class="status">
+      <span class="badge" id="badge-featherless" title="Featherless LLM Status"><i class="dot"></i><span class="badge-label">Featherless</span><b class="badge-state">…</b></span>
+      <span class="badge" id="badge-elevenlabs" title="ElevenLabs TTS Status"><i class="dot"></i><span class="badge-label">ElevenLabs</span><b class="badge-state">…</b></span>
+    </div>
     <nav class="nav">
       <a href="./">Einzelkreuzung</a>
       <a href="network.html">Netzwerk</a>
       <a href="https://github.com/derKosi/SignalFlow">GitHub</a>
     </nav>
+    <button id="btn-theme" class="tbtn" type="button" title="Farbschema wechseln">🌙</button>
   </header>
 
   <div class="vswitch" role="group" aria-label="Writeup-Fassung">
@@ -103,12 +127,12 @@
   <article class="version on" id="v-de-full" lang="de">
   <h1>Adaptive Ampelsteuerung — von einer Kreuzung bis zum ganzen Stadtteil</h1>
   <p class="lede">MunichTech EXPO 2026 · Challenge „Smart Cities: Adaptive Traffic Flow” ·
-    <span class="pill">0 Dependencies</span><span class="pill">108 Tests</span><span class="pill">OSM-Daten (ODbL)</span></p>
+    <span class="pill">0 Dependencies</span><span class="pill">116 Tests</span><span class="pill">OSM-Daten (ODbL)</span></p>
 
   <div class="kpis">
     <div class="kpi"><div class="k">Ø Verzögerung (Kreuzung)</div><div class="v">−24,5 %</div><div class="d">53,9 s → 40,7 s</div></div>
     <div class="kpi"><div class="k">Verschenktes Grün</div><div class="v">−68,4 %</div><div class="d">374 s → 118 s</div></div>
-    <div class="kpi"><div class="k">Stadtteile (6 Regionen)</div><div class="v">−61 bis −81 %</div><div class="d">echte OSM-Netze</div></div>
+    <div class="kpi"><div class="k">Stadtteile (9 Regionen)</div><div class="v">−61 bis −81 %</div><div class="d">echte OSM-Netze</div></div>
     <div class="kpi"><div class="k">Erklärbarkeit</div><div class="v">100 %</div><div class="d">jede Zahl aus echten Läufen</div></div>
   </div>
 
@@ -118,7 +142,7 @@
   Steuerung, die sich <b>live anpasst</b> und den Gewinn zeigt. Zwei Fallen stecken darin: ein System,
   das Anpassung nur <i>behauptet</i>, und eines, das nur an einer Kreuzung funktioniert. SignalFlow
   schickt <b>denselben Verkehr</b> (gleicher Seed) durch festen Plan und adaptiven Controller —
-  nebeneinander, Bild für Bild — und skaliert bis auf sechs echte Stadtteilnetze.</p>
+  nebeneinander, Bild für Bild — und skaliert bis auf neun echte Stadtteilnetze (weitere live ladbar).</p>
 
   <h2>2 · Die vier Strategien — und wie sie sich unterscheiden</h2>
   <p>Der Kern der Auswertung ist ein fairer Vierkampf. Jede Strategie hat eine andere Vorstellung
@@ -251,7 +275,7 @@
 
   <h2>9 · Ausführen &amp; Weiterlesen</h2>
   <p><code>python3 server.py</code> → <a href="http://127.0.0.1:8000">http://127.0.0.1:8000</a> ·
-     Tests: <code>python3 -m unittest discover -s tests</code> → 108/108 grün</p>
+     Tests: <code>python3 -m unittest discover -s tests</code> → 116/116 grün</p>
   <div class="links">
     <a href="https://github.com/derKosi/SignalFlow">GitHub: derKosi/SignalFlow<span>das ganze Repository</span></a>
     <a href="https://github.com/derKosi/SignalFlow/blob/main/README.md">README<span>Quickstart &amp; Kernzahlen</span></a>
@@ -333,7 +357,7 @@
   <article class="version" id="v-en-full" lang="en">
   <h1>Adaptive signal control — from one junction to a whole district</h1>
   <p class="lede">MunichTech EXPO 2026 · challenge “Smart Cities: Adaptive Traffic Flow” ·
-    <span class="pill">0 dependencies</span><span class="pill">108 tests</span><span class="pill">OSM data (ODbL)</span></p>
+    <span class="pill">0 dependencies</span><span class="pill">116 tests</span><span class="pill">OSM data (ODbL)</span></p>
 
   <div class="kpis">
     <div class="kpi"><div class="k">Avg delay (junction)</div><div class="v">−24.5 %</div><div class="d">53.9 s → 40.7 s</div></div>
@@ -477,7 +501,7 @@
 
   <h2>9 · Run it &amp; read more</h2>
   <p><code>python3 server.py</code> → <a href="http://127.0.0.1:8000">http://127.0.0.1:8000</a> ·
-     tests: <code>python3 -m unittest discover -s tests</code> → 108/108 green</p>
+     tests: <code>python3 -m unittest discover -s tests</code> → 116/116 green</p>
   <div class="links">
     <a href="https://github.com/derKosi/SignalFlow">GitHub: derKosi/SignalFlow<span>the whole repository</span></a>
     <a href="https://github.com/derKosi/SignalFlow/blob/main/README.md">README<span>quickstart &amp; headline numbers</span></a>
@@ -575,7 +599,7 @@
       <h3>Ein-Befehl-Stack</h3>
       <p>Python 3.11+ <b>Standardlib only</b> (kein pip, kein Build) + Vanilla-JS-Frontend.
       <code>python3 server.py</code> → <a href="http://127.0.0.1:8000">http://127.0.0.1:8000</a>.
-      Deterministisch über Seed, <b>108/108 Tests</b>, Datenträger-Cache macht die Demo instant.</p>
+      Deterministisch über Seed, <b>116/116 Tests</b>, Datenträger-Cache macht die Demo instant.</p>
     </div>
     <div class="panel">
       <h3>Reproduzierbarkeit</h3>
@@ -594,7 +618,6 @@
       (simulate, simulate_network, compare) gegen den echten Simulator · <b>Weekly Report</b>
       schreibt die Zusammenfassung — mit Zahlengate im Code (halluzinierte Zahlen werden verworfen).
       Ohne Key: deterministischer Offline-Erklärer.</div>
-      <span class="award">Kategorie „Best Project Built with Featherless” ($300)</span>
     </div>
     <div class="sponsor">
       <h3>ElevenLabs — Sprachausgabe</h3>
@@ -602,15 +625,13 @@
       <b>/api/tts</b> liest Ergebnisse und Agent-Antworten vor („🔊 Ergebnis vorlesen”,
       „🔊 Vorlesen”, Auto-Vorlesen nach jedem Lauf) — Stimme als
       First-Class-Interface, nicht Anhängsel. Ohne Key: Text bleibt, Ton deaktiviert.</div>
-      <span class="award">Kategorie „Best Project Built with ElevenLabs” (bis 6 mo Scale)</span>
     </div>
     <div class="sponsor">
       <h3>OpenStreetMap — Daten (ODbL)</h3>
       <div class="where">
-      Alle sechs Stadtteilnetze sind <b>echte OSM-Graphen</b> (Nominatim → Overpass → Kompilierer);
+      Alle vorbereiteten Stadtteilnetze sind <b>echte OSM-Graphen</b> (Nominatim → Overpass → Kompilierer);
       weitere Orte lassen sich live in der App nachladen. Kartendaten ©
       OpenStreetMap-Mitwirkende, ODbL 1.0 — Attribution steht in jeder Netzwerk-Ansicht.</div>
-      <span class="award">Realitätsnähe: echte Straßen, echte Topologie, echte Einbahnstraßen</span>
     </div>
   </div>
 
@@ -619,7 +640,7 @@
     <tr><th>Kriterium</th><th>Evidenz</th></tr>
     <tr><td><b>Messbare Fluss-Verbesserung</b></td><td>Kreuzung −24,5 % Verzögerung; Stadtteile −61 bis −81 %; +12 bis +49 % mehr abgeschlossene Trips — alles seed-reproduzierbar</td></tr>
     <tr><td><b>Realismus des Ansatzes</b></td><td>Echte OSM-Netze, Sättigungsfluss, Räumzeiten, Spillback, Tagesgänge, verlustbehaftete Detektoren (Dropout-Modell)</td></tr>
-    <tr><td><b>Technische Ausführung</b></td><td>108 Tests grün, 0 Dependencies, deterministisch, Path-Traversal-Guard, graceful degradation ohne Keys</td></tr>
+    <tr><td><b>Technische Ausführung</b></td><td>116 Tests grün, 0 Dependencies, deterministisch, Path-Traversal-Guard, graceful degradation ohne Keys</td></tr>
     <tr><td><b>Demo-Qualität</b></td><td>Animierte Kreuzung + Netzwerk-Karte, Knoten-Drilldown, Entscheidungs-Log, Chat mit Werkzeugspur, Stimme — 2–3-Minuten-Drehbuch (DEMO.md)</td></tr>
     <tr><td><b>„Sensor/Camera Feed”</b></td><td>CSV-Zählfeed-Modus (Datei oder URL, Detektor-Dropout) — Herausforderungstext wörtlich erfüllt</td></tr>
   </table>
@@ -687,6 +708,38 @@
   if (!v) { try { v = localStorage.getItem('sf-writeup-version') || ''; } catch (e) {} }
   if (!document.getElementById('v-' + v)) v = 'de-full';
   apply(v);
+
+  // Hell/Dunkel (gleiches localStorage-Flag wie die Dashboards)
+  var tbtn = document.getElementById('btn-theme');
+  var applyTheme = function (t) {
+    document.body.dataset.theme = t;
+    if (tbtn) tbtn.textContent = t === 'light' ? '☀️' : '🌙';
+    try { localStorage.setItem('sf-theme', t); } catch (e) {}
+  };
+  var theme = 'dark';
+  try { theme = localStorage.getItem('sf-theme') || 'dark'; } catch (e) {}
+  if (theme !== 'light' && theme !== 'dark') theme = 'dark';
+  applyTheme(theme);
+  if (tbtn) tbtn.addEventListener('click', function () {
+    applyTheme(document.body.dataset.theme === 'light' ? 'dark' : 'light');
+  });
+
+  // Status-Badges wie auf den Dashboards
+  var setBadge = function (id, ok, okText, offText) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.classList.remove('ok', 'off', 'err');
+    el.classList.add(ok === null ? 'err' : (ok ? 'ok' : 'off'));
+    var st = el.querySelector('.badge-state');
+    if (st) st.textContent = ok === null ? 'nicht erreichbar' : (ok ? okText : offText);
+  };
+  fetch('api/health').then(function (r) { return r.json(); }).then(function (h) {
+    setBadge('badge-featherless', !!h.featherless, 'verbunden', 'Offline-Fallback');
+    setBadge('badge-elevenlabs', !!h.elevenlabs, 'verbunden', 'Offline');
+  }).catch(function () {
+    setBadge('badge-featherless', null, '', '');
+    setBadge('badge-elevenlabs', null, '', '');
+  });
 })();
 </script>
 </body>

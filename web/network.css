@@ -46,16 +46,18 @@
 }
 
 /* --------------------------- Gebiet + Stats ---------------------------- */
+/* Textfelder über Theme-Variablen — im Hell-Modus hell statt dunkel */
+#region-filter, .add-row input{
+  font:inherit; font-size:13px; color:var(--txt); background:var(--panel-2);
+  border:1px solid var(--line); border-radius:8px; padding:8px 10px; outline:none;
+  width:100%; max-width:100%;
+}
+#region-filter:focus, .add-row input:focus{ border-color:var(--accent-2); }
 .add-row{ display:flex; gap:8px; align-items:center; }
-.add-row input{ flex:1 1 160px; min-width:120px; padding:6px 9px; border-radius:8px;
-  border:1px solid #243244; background:#0d1626; color:var(--ink,#e2e8f0); font-size:13px; }
+.add-row input{ flex:1 1 160px; min-width:120px; }
 .add-region .run-hint{ display:block; margin-top:6px; margin-left:0; }
 .run-hint{ font-size:12.5px; color:#f5c451; }
 .kpi .tag[title]{ cursor:help; }
-#region-filter{
-  margin-top:2px; padding:6px 9px; border-radius:8px;
-  border:1px solid #243244; background:#0d1626; color:var(--ink,#e2e8f0); font-size:12.5px;
-}
 .stat{
   display:inline-flex; align-items:baseline; gap:7px;
   background:var(--panel-2); border:1px solid var(--line); border-radius:999px;
@@ -68,7 +70,7 @@
 /* ------------------------------ Steuerung ------------------------------ */
 /* Einstellungen wie auf der Einzelkreuzung gruppiert (.ctl-group aus
    styles.css); hier nur die Netzwerk-Besonderheiten. */
-.ctl-grid-region{ grid-template-columns:repeat(2, minmax(240px, 1fr)); }
+.ctl-grid-region{ grid-template-columns:minmax(170px,1fr) minmax(170px,1fr) minmax(230px,1.4fr); }
 .dash.net .ctl-group .ctl-grid{ grid-template-columns:repeat(4, minmax(150px, 1fr)); }
 /* Zeitfenster: eine Spalte, kompakt — die Zeit-Elemente passen in eine Reihe */
 .dash.net .ctl-group .ctl-grid .control{ min-width:0; }

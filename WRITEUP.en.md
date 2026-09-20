@@ -25,7 +25,8 @@ one that works only at a single intersection.
 
 SignalFlow avoids both. It runs the **same traffic** (same seed) through a
 fixed plan and an adaptive controller, side by side, frame by frame — and it
-scales from one junction to **six real German district networks**.
+scales from one junction to **nine real German district networks** (more
+loadable live from OpenStreetMap).
 
 ## 2. The four strategies — and how they differ
 
@@ -43,14 +44,64 @@ One-line takeaway: **adaptive wins almost everywhere — but not always against
 a plan that has learned from real data. We show exactly that instead of
 hiding it.**
 
-## 3. How the simulation works, roughly
+## 3. Architecture — from the map to the answer
+
+### 3.1 Components & data flow
+
+SignalFlow is **one Python process (standard library only) plus two static
+dashboards** — no install, no build step, no CDN (ADR 1,
+[docs/design-decisions.md](docs/design-decisions.md)). Everything runs on a
+judge's laptop with a single command:
+
+| Layer | Component | Role |
+|---|---|---|
+| **Data** | `data/regions/*.json` | compiled OSM graphs (committed, ODbL) — the demo does not depend on a live Overpass |
+| **Simulation cores** | `signalflow/simulation.py` · `network.py` | junction vs. district model (§3.3); four and five strategies on identical traffic |
+| **API** | `server.py` | static files + JSON endpoints; result cache (RAM + disk, keyed by request hash), `SIM_LOCK` serialises heavy runs (5 concurrent clients tested) |
+| **Explainability** | `signalflow/agent.py` · `integrations.py` | explain/agent/TTS with deterministic offline fallbacks and an anti-hallucination gate (§5) |
+| **Frontend** | `web/` | two dashboards sharing one visual language: strategy toggles, KPI matrix, time series with clock zoom, decision protocol, junction drilldown |
+
+Data flow at a glance (full diagram:
+[docs/architecture.svg](docs/architecture.svg) ·
+[docs/architecture.md](docs/architecture.md)):
+
+```
+ OpenStreetMap (Overpass) ──► data/regions/*.json ──► network.py ──┐
+ Demand: Poisson model or sensor CSV ──► simulation.py ────────────┤
+                                                                   ▼
+        ┌──────────────────────── server.py ────────────────────────┐
+        │  cache (RAM + disk) · SIM_LOCK · LAST / LAST_NETWORK      │
+        └───────────────────────────────────────────────────────────┘
+          ▲                    ▲                    ▲
+   POST /api/simulate   POST /api/simulate_network   POST /api/agent
+   GET  /api/config     GET  /api/regions            POST /api/explain · /api/tts
+          ▲                    ▲                    ▲
+    junction dashboard    district dashboard    Featherless (LLM) · ElevenLabs (TTS)
+```
+
+Two details that matter in the demo moment: the dashboards are **static
+files** calling relative URLs — no build/CORS issues; and the server keeps
+the last result per page (`LAST` / `LAST_NETWORK`) separately, so the LLM
+agent always explains **the run currently on screen**, even with both pages
+open.
+
+### 3.2 Fair comparison as an architectural principle
+
+The four-way contest from §2 is not a presentation choice — it is baked into
+the core: `run_scenario` (junction) and `run_region` (district) generate
+**one** arrival stream from the seed and run every strategy against it, so
+KPI differences can only come from the control. Both are pure functions of
+`(config, seed)`: running twice yields identical numbers (asserted in the
+test suite). The disk cache makes repeated demo runs instant; warm-up before
+the time window (15 min junction / 5 min district) is excluded from all KPIs.
+
+### 3.3 The two simulation cores
 
 **Single junction.** A discrete-time queueing model at a 1-second step: four
 approaches × (left / through / right) = 12 movements, Poisson arrivals with a
 time-of-day profile (rush hour, holidays, weekend), saturation-flow service
 (1 800 veh/h/lane, PCE-weighted for trucks/buses), four protected phases.
-Delay = Σ queue · dt; CO₂ is an idling-time proxy. Both controllers face the
-**identical arrival stream** — an apples-to-apples comparison.
+Delay = Σ queue · dt; CO₂ is an idling-time proxy.
 
 **District.** A mesoscopic **link-queue model** on the real OSM graph: every
 directed link carries a free-flow travel bucket and a stop-line queue;
@@ -59,9 +110,10 @@ cap) and the signal phase. Demand is a gravity OD matrix routed with
 Dijkstra; turning fractions and a per-link exit share distribute and
 terminate trips. Baseline: a fixed 60 s two-phase cycle; alternative:
 max-pressure **per junction**; the green wave puts a common cycle and
-travel-time offsets (× 0.95) on the longest corridors. Networks: **Messe/ICM
-Riem** (355 nodes / 569 links / 58 signals), **Altstadtring** (2597 / 4159 /
-708), plus Berlin Mitte, Hamburg Innenstadt, Köln and Heidelberg — more
+travel-time offsets (× 0.95) on the longest corridors; Tuned\* retimes the
+splits from counts (§4). Networks: **Messe/ICM Riem** (355 nodes / 569
+links / 58 signals), **Altstadtring** (2597 / 4159 / 708), plus Berlin
+Mitte, Hamburg Innenstadt, Köln, Heidelberg and more — further regions
 loadable live via OSM Overpass.
 
 ## 4. Results
@@ -78,27 +130,37 @@ loadable live via OSM Overpass.
 Across a demand sweep (0.8–1.1×): mean delay reduction **39.9 %** (54.8 %
 uncongested, 16 % oversaturated).
 
-**District** (15 min peak, real OSM networks):
+**District** (15 min peak, real OSM networks; the Tuned\* column is the
+count-based variant, [docs/results.md](docs/results.md) §3.1):
 
-| Region | Signals | Fixed | Adaptive | Coordinated |
-|---|---:|---:|---:|---:|
-| München — Messe/ICM Riem | 58 | 184.8 s | 92.9 s | **70.5 s (−61.9 %)** |
-| München — Altstadtring | 708 | 266.5 s | **94.2 s (−64.6 %)** | 111.0 s |
-| Berlin — Mitte | 204 | 189.1 s | **68.9 s (−63.6 %)** | 69.8 s |
-| Hamburg — Innenstadt | 173 | 109.5 s | 38.4 s | **38.2 s (−65.1 %)** |
-| Köln — Innenstadt | 102 | 150.6 s | **47.4 s (−68.5 %)** | 58.0 s |
-| Heidelberg — Uni | 81 | 236.3 s | **44.5 s (−81.2 %)** | 75.5 s |
+| Region | Signals | Fixed | Adaptive | Coordinated | Tuned\* (from counts) |
+|---|---:|---:|---:|---:|---:|
+| München — Messe/ICM Riem | 58 | 184.8 s | 92.9 s | **70.5 s (−61.9 %)** | 105.7 s (−42.8 %) |
+| München — Altstadtring | 708 | 266.5 s | 94.2 s (−64.6 %) | 111.0 s | **81.4 s (−69.5 %)** |
+| Berlin — Mitte | 204 | 189.1 s | 68.9 s (−63.6 %) | 69.8 s | **57.2 s (−69.8 %)** |
+| Hamburg — Innenstadt | 173 | 109.5 s | 38.4 s | 38.2 s (−65.1 %) | **28.3 s (−74.2 %)** |
+| Köln — Innenstadt | 102 | 150.6 s | **47.4 s (−68.5 %)** | 58.0 s | 48.9 s (−67.5 %) |
+| Heidelberg — Uni | 81 | 236.3 s | 44.5 s (−81.2 %) | 75.5 s | **39.9 s (−83.1 %)** |
 
-**Honesty box.** The detector-tuned plan **Tuned\*** beats adaptive on
-short-link grids (Berlin, Hamburg); with the opt-in Webster cycle approach,
+**Honesty box.** The table shows it live: the detector-tuned plan **Tuned\***
+wins four of six networks (Altstadtring, Berlin, Hamburg, Heidelberg) — and
+it does so from an **estimate**, not the true demand: 80–100 % of the
+oracle's improvement is recovered from pure counts
+([docs/results.md](docs/results.md) §3.1). With the opt-in Webster cycle,
 adaptive beats the oracle plan on Riem (+8.2 %) and Köln (+2.5 %) for the
-first time. These findings stand unedited in
-[docs/results.md](docs/results.md) — strong baselines and visible losses are
-part of being honest.
+first time (§3.2 there). Strong baselines and visible losses are part of
+being honest — adaptive wins on average, but not always and not everywhere.
 
 ## 5. Explainability
 
-Every phase switch is logged with its pressures; `/api/explain` turns the log
+Explainability starts in the dashboard, not at the LLM: the junction logs
+every phase switch with its reasoning and pressures; the district protocol
+shows the top congested links (click opens the junction view) and each
+strategy's plan — the fixed plan, the green-wave corridor offsets, the fit
+quality of the OD estimate behind Tuned\*. The KPI matrix shows every
+improvement *and* every loss against Fixed.
+
+Beyond that, `/api/explain` turns the log
 into prose (Featherless, OpenAI-compatible) and `/api/tts` speaks it
 (ElevenLabs) — without keys a deterministic offline explainer answers and
 voice is disabled. Beyond narration, **`/api/agent` is agentic**: it plans
@@ -223,7 +285,7 @@ networks, to **Featherless** (LLM API for explanations & the agent) and
 
 ```bash
 python3 server.py        # or ./run.sh  →  http://127.0.0.1:8000
-python3 -m unittest discover -s tests     # 108/108 green
+python3 -m unittest discover -s tests     # 116/116 green
 ```
 
 | Where? | What you'll find |

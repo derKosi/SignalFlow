@@ -616,7 +616,7 @@
   }
 
   // lädt fehlende Kacheln nach; zeichnet, was da ist; liefert "fertig?" zurück
-  function drawTileLayer(ctx, w, h, proj) {
+  function drawTileLayer(ctx, w, h, proj, pal) {
     const mb = state.mercBox;
     if (!mb) return true;
     const z = tileZoomFor(w, h);
@@ -629,7 +629,8 @@
     let pending = 0;
     ctx.save();
     ctx.globalAlpha = state.osmOpacity;
-    try { ctx.filter = 'grayscale(0.75) brightness(0.5) contrast(1.08)'; } catch (e) { /* alt */ }
+    const p = pal || mapPal();
+    try { ctx.filter = p.tileFilter; } catch (e) { /* alt */ }
     for (let tx = x0; tx <= x1; tx++) {
       for (let ty = y0; ty <= y1; ty++) {
         const url = 'https://tile.openstreetmap.org/' + z + '/' + tx + '/' + ty + '.png';
@@ -660,12 +661,36 @@
     return pending === 0;
   }
 
+  // Karten-Farben je Theme: dunkel = Monitor-Look, hell = Papierkarte. Die
+  // OSM-Kacheln sind von Grund hell — im Hell-Modus brauchen sie kein Invert.
+  function mapPal() {
+    const light = document.body.dataset.theme === 'light';
+    return light ? {
+      bg: '#f6f4ef', free: '#cdc6b9', nodeFaint: 'rgba(52,64,76,.40)',
+      signal: '#0d9488', frame: '#d9d3c7', drillRing: '#1e2a37',
+      road: '#eceae3', roadEdge: '#b6afa2', laneDash: '#a49d8f',
+      hub: '#faf8f3', hubRing: 'rgba(30,42,54,.55)',
+      compass: '#6d675c', chipBg: 'rgba(250,248,243,.92)', chipBorder: '#c7c0b2',
+      phText: 'rgba(13,148,136,1)', tText: 'rgba(90,100,110,.95)',
+      tileFilter: 'grayscale(0.25) contrast(0.98)',
+    } : {
+      bg: '#0a0e13', free: '#2b3746', nodeFaint: 'rgba(200,214,228,.45)',
+      signal: '#2dd4bf', frame: COL.grid, drillRing: '#e6edf3',
+      road: '#141c25', roadEdge: '#2a3948', laneDash: '#33465a',
+      hub: '#101823', hubRing: 'rgba(230,237,243,.55)',
+      compass: '#5d6b7a', chipBg: 'rgba(9,13,18,.78)', chipBorder: '#223040',
+      phText: 'rgba(45,212,191,.9)', tText: 'rgba(139,152,167,.9)',
+      tileFilter: 'grayscale(0.75) brightness(0.5) contrast(1.08)',
+    };
+  }
+
   function drawNetwork(canvas, which) {
+    const pal = mapPal();
     const fit = fitCanvas(canvas);
     const ctx = fit.ctx, w = fit.w, h = fit.h;
     ctx.clearRect(0, 0, w, h);
     // Hintergrund
-    ctx.fillStyle = '#0a0e13';
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, w, h);
 
     if (!state.result || !state.bbox) { centerText(ctx, w, h, 'Keine Daten'); return; }
@@ -678,7 +703,7 @@
     const signalSet = new Set(state.result.network.signal_nodes || []);
 
     // OSM-Karte als halbtransparente Unterlage (wenn zugeschaltet)
-    if (state.osm && proj) drawTileLayer(ctx, w, h, proj);
+    if (state.osm && proj) drawTileLayer(ctx, w, h, proj, pal);
 
     const f = frames[frameIndex(frames, state.t)];
     const qmap = new Map();
@@ -700,7 +725,7 @@
         ctx.strokeStyle = queueColor(q);
         ctx.lineWidth = Math.min(5, 1.4 + lanes * 0.7 + clamp(q / REF_QUEUE, 0, 1) * 1.4);
       } else {
-        ctx.strokeStyle = '#2b3746';
+        ctx.strokeStyle = pal.free;
         ctx.lineWidth = Math.min(3.4, 1.1 + lanes * 0.55);
       }
       ctx.stroke();
@@ -716,24 +741,24 @@
         if (state.drill && state.drill.nodeId === nd.id) {
           ctx.beginPath();
           ctx.arc(p[0], p[1], 7.5, 0, Math.PI * 2);
-          ctx.strokeStyle = '#e6edf3';
+          ctx.strokeStyle = pal.drillRing;
           ctx.lineWidth = 1.5;
           ctx.stroke();
         }
         ctx.beginPath();
         ctx.arc(p[0], p[1], 3.0, 0, Math.PI * 2);
-        ctx.fillStyle = '#2dd4bf';
+        ctx.fillStyle = pal.signal;
         ctx.fill();
       } else {
         ctx.beginPath();
         ctx.arc(p[0], p[1], 1.6, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(200,214,228,.45)';
+        ctx.fillStyle = pal.nodeFaint;
         ctx.fill();
       }
     }
 
     // Rahmen
-    ctx.strokeStyle = COL.grid;
+    ctx.strokeStyle = pal.frame;
     ctx.lineWidth = 1;
     ctx.strokeRect(0.5, 0.5, w - 1, h - 1);
   }
@@ -927,8 +952,9 @@
 
     const fit = fitCanvas(canvas);
     const ctx = fit.ctx, w = fit.w, h = fit.h;
+    const pal = mapPal();
     const cx = w / 2, cy = h / 2;
-    ctx.fillStyle = '#0a0e13';
+    ctx.fillStyle = pal.bg;
     ctx.fillRect(0, 0, w, h);
 
     const R = Math.min(w, h) * 0.12;                 // junction hub radius
@@ -942,13 +968,13 @@
       const ang = Math.atan2(dy, dx);
       // road surface + edges + dashed centre line
       ctx.lineCap = 'butt';
-      ctx.strokeStyle = '#141c25';
+      ctx.strokeStyle = pal.road;
       ctx.lineWidth = roadHalf * 2;
       ctx.beginPath();
       ctx.moveTo(cx + dx * R, cy + dy * R);
       ctx.lineTo(cx + dx * maxLen, cy + dy * maxLen);
       ctx.stroke();
-      ctx.strokeStyle = '#2a3948'; ctx.lineWidth = 1.2;
+      ctx.strokeStyle = pal.roadEdge; ctx.lineWidth = 1.2;
       [-1, 1].forEach(function (s) {
         const ox = -dy * s * roadHalf, oy = dx * s * roadHalf;
         ctx.beginPath();
@@ -957,7 +983,7 @@
         ctx.stroke();
       });
       ctx.setLineDash([6, 6]);
-      ctx.strokeStyle = '#33465a';
+      ctx.strokeStyle = pal.laneDash;
       ctx.beginPath();
       ctx.moveTo(cx + dx * (R + 6), cy + dy * (R + 6));
       ctx.lineTo(cx + dx * maxLen, cy + dy * maxLen);
@@ -1003,14 +1029,14 @@
     // hub
     ctx.beginPath();
     ctx.arc(cx, cy, R, 0, Math.PI * 2);
-    ctx.fillStyle = '#101823';
+    ctx.fillStyle = pal.hub;
     ctx.fill();
-    ctx.strokeStyle = 'rgba(230,237,243,.55)';
+    ctx.strokeStyle = pal.hubRing;
     ctx.lineWidth = 2;
     ctx.stroke();
 
     // compass + readout chip (unrotated HUD)
-    ctx.fillStyle = '#5d6b7a';
+    ctx.fillStyle = pal.compass;
     ctx.font = '600 11px ' + FONT;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
@@ -1021,14 +1047,14 @@
     ctx.font = '600 11px ' + FONT;
     const chipW = Math.max(ctx.measureText(phText).width,
                            ctx.measureText(tText).width) + 20;
-    ctx.fillStyle = 'rgba(9,13,18,.78)';
-    ctx.strokeStyle = '#223040';
+    ctx.fillStyle = pal.chipBg;
+    ctx.strokeStyle = pal.chipBorder;
     rrLocal(ctx, w - 12 - chipW, 8, chipW, 32, 8);
     ctx.fill();
     ctx.stroke();
-    ctx.fillStyle = 'rgba(45,212,191,.9)';
+    ctx.fillStyle = pal.phText;
     ctx.fillText(phText, w - 12 - chipW / 2, 18);
-    ctx.fillStyle = 'rgba(139,152,167,.9)';
+    ctx.fillStyle = pal.tText;
     ctx.font = '10px ' + FONT;
     ctx.fillText(tText, w - 12 - chipW / 2, 30);
   }
@@ -1682,7 +1708,14 @@
 
   function updateSpeedReadout() {
     const el = $('speed-readout');
-    if (el) el.textContent = fmt(playbackRate() * state.speed, 0) + '×';
+    if (!el) return;
+    // Sim-Sekunden je Echtzeit-Sekunde — menschlich ausgedrückt
+    const r = playbackRate() * state.speed;
+    const txt = r >= 120 ? '≈ ' + fmt(r / 60, 1) + ' min/s' : '≈ ' + fmt(r, 0) + ' s/s';
+    el.textContent = txt;
+    el.title = 'Wiedergabetempo: 1 Sekunde Echtzeit ≈ ' +
+      (r >= 120 ? fmt(r / 60, 1) + ' Minuten' : fmt(r, 0) + ' Sekunden') +
+      ' Simulation (Faktor ' + fmt(r, 0) + '×)';
   }
 
   let lastTs = 0;
@@ -2026,13 +2059,17 @@
   }
 
   /* ------------------------------- Start --------------------------------- */
-  // dark ⇄ light theme (persisted; canvases stay dark "monitors")
+  // dark ⇄ light theme (persisted); die Karten folgen dem Theme
   function initTheme() {
     const btn = $('btn-theme');
     const apply = function (t) {
       document.body.dataset.theme = t;
       if (btn) btn.textContent = t === 'light' ? '☀️' : '🌙';
       try { localStorage.setItem('sf-theme', t); } catch (e) { /* ignore */ }
+      // Karten im neuen Look zeichnen (Kachel-Filter + Straßenfarben)
+      state._drawSig = null;
+      drawActiveCanvases(true);
+      if (state.drill) drawDrill();
     };
     let t = 'dark';
     try { t = localStorage.getItem('sf-theme') || 'dark'; } catch (e) { /* ignore */ }
