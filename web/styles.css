@@ -336,19 +336,6 @@ table.kpi-table td.v.best{ text-shadow:0 0 10px rgba(230,237,243,.22); }
 }
 body[data-theme="light"] .zoom-row input[type=time]{ color-scheme:light; }
 .zoom-row .btn{ font-size:11.5px; padding:4px 10px; }
-/* Strategien-Filter direkt auf den Auswertungs-Karten */
-.pol-filter{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; align-items:center; }
-.pfilter{
-  font:inherit; font-size:11.5px; color:var(--muted); background:var(--panel-2);
-  border:1px solid var(--line); border-radius:999px; padding:4px 11px; cursor:pointer;
-  display:inline-flex; align-items:center; gap:6px; transition:.15s;
-}
-.pfilter .pdot{ margin-right:0; width:8px; height:8px; opacity:.45; transition:.15s; }
-.pfilter:hover{ color:var(--txt); }
-.pfilter.active{ color:var(--txt); border-color:rgba(56,189,248,.55); background:rgba(56,189,248,.08); }
-.pfilter.active .pdot{ opacity:1; }
-.pfilter.all{ color:var(--faint); }
-.pfilter.all.active{ color:var(--accent-2); }
 
 /* Frag-SignalFlow: Vorschlags-Chips */
 .ask-chips{ display:flex; flex-wrap:wrap; gap:6px; margin:0 0 10px; }
