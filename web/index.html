@@ -63,9 +63,12 @@
 
   <!-- ======================= CONTROL BAR ======================= -->
   <section class="panel controls" aria-label="Simulationsparameter">
-    <button id="btn-simulate" class="btn primary sim-run" type="button" title="Simulation mit den gewählten Einstellungen neu rechnen">
-      <span class="btn-label">▶ Simulieren</span>
-    </button>
+    <div class="sim-row">
+      <button id="btn-simulate" class="btn primary sim-run" type="button" title="Simulation mit den gewählten Einstellungen neu rechnen">
+        <span class="btn-label">▶ Simulieren</span>
+      </button>
+      <span id="run-hint" class="run-hint hidden"></span>
+    </div>
 
     <div class="ctl-group">
       <h3>Nachfrage <span class="grp-sub">wer kommt wann, wie viele?</span></h3>
@@ -206,8 +209,7 @@
       </div>
 
       <div class="readouts">
-        <span class="pill"><span class="k">Uhrzeit</span> <b id="playhead-clock">–</b></span>
-        <span class="pill mono"><span class="k">t</span> <b id="playhead-t">0.0s</b></span>
+        <span class="pill mono" id="pill-clock" title="Uhrzeit im simulierten Zeitfenster"><b id="playhead-clock">–</b></span>
         <span class="pill" id="pill-phase"><span class="k">Phase</span> <b id="playhead-phase">–</b></span>
         <span class="pill mono" title="Fahrzeuge insgesamt in Warteschlangen (sichtbare Strategien)"><span class="k">Σ Queue</span> <b id="playhead-queue">–</b></span>
       </div>
@@ -249,17 +251,23 @@
   <!-- ========================= CHARTS ========================= -->
   <section class="charts">
     <div class="panel chart-panel">
-      <h2>Strategien im Vergleich</h2>
-      <p class="panel-sub">Je Kennzahl eigen-skaliert, alle vier Strategien (Kreisverkehr: Signal vs. Yield)</p>
+      <h2>Kennzahlen im Vergleich</h2>
+      <p class="panel-sub">Jede Gruppe = eine Kennzahl, jeder Balken = eine Strategie (Farbe siehe Legende). Balkenhöhen sind je Kennzahl eigen-skaliert — vergleichen wird innerhalb der Gruppe; der kürzeste Balken bei „weniger ist besser“ ist der Sieger.</p>
       <canvas id="chart-bars"></canvas>
     </div>
     <div class="panel chart-panel">
       <h2>Verlauf über die Zeit</h2>
       <div class="chart-tools">
-        <div class="modes chart-metrics" role="group" aria-label="Metrik">
-          <button class="mode-btn met-btn active" data-met="queue" type="button" title="Fahrzeuge in Warteschlangen zum jeweiligen Zeitpunkt">Warteschlangen</button>
-          <button class="mode-btn met-btn" data-met="delay" type="button" title="Kumulierte Verzögerung (veh·s) — die „Burn-up“-Kurve">Verzögerung ∑</button>
-          <button class="mode-btn met-btn" data-met="co2" type="button" title="Kumulierter CO₂-Proxy (g), aus der Verzögerung abgeleitet">CO₂ ∑</button>
+        <div class="modes chart-metrics" role="group" aria-label="Kennzahl">
+          <button class="mode-btn met-btn active" data-met="delay" type="button" title="Verzögerung: Verlauf = wartende Fahrzeuge (Rate), kumuliert = Summe (veh·s)">Verzögerung</button>
+          <button class="mode-btn met-btn" data-met="throughput" type="button" title="Durchsatz: Verlauf = momentaner Fz/h, kumuliert = Ø bis Zeitpunkt t">Durchsatz</button>
+          <button class="mode-btn met-btn" data-met="maxq" type="button" title="Längste Warteschlange je Zeitpunkt bzw. Rekord bis t">max. Queue</button>
+          <button class="mode-btn met-btn" data-met="co2" type="button" title="CO₂-Proxy aus Leerlauf: Verlauf je Frame, kumuliert in Gramm">CO₂</button>
+          <button class="mode-btn met-btn" data-met="wasted" type="button" title="Leerlauf-Grün: Grün ohne wartende Fahrzeuge — Verlauf je Frame, kumuliert in Sekunden">Leerlauf-Grün</button>
+        </div>
+        <div class="modes chart-mode" role="group" aria-label="Modus">
+          <button class="mode-btn cmode-btn active" data-cmode="abs" type="button" title="Wert zum jeweiligen Zeitpunkt">Verlauf</button>
+          <button class="mode-btn cmode-btn" data-cmode="cum" type="button" title="Aufsummiert bis zum jeweiligen Zeitpunkt">Kumuliert</button>
         </div>
         <div class="zoom-row">
           <span class="k">Zoom</span>

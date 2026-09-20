@@ -41,8 +41,8 @@
     EW_THRU_T3: ['E', 'W'], N_MINOR: ['N'], W_LEFT: ['W'],
   };
   const PHASE_LABEL = {
-    NS_THRU: 'N–S · Geradeaus', NS_LEFT: 'N–S · Links',
-    EW_THRU: 'O–W · Geradeaus', EW_LEFT: 'O–W · Links',
+    NS_THRU: 'N–S · Gerade', NS_LEFT: 'N–S · Links',
+    EW_THRU: 'O–W · Gerade', EW_LEFT: 'O–W · Links',
     NS: 'N–S (permissiv)', EW: 'O–W (permissiv)',
     N_MINOR: 'N · Nebenrichtung', W_LEFT: 'O · Links',
     roundabout: 'Kreisverkehr (yield)',
@@ -113,7 +113,8 @@
     // playback: which strategies are shown (subset of availablePolicies)
     visible: { fixed: true, adaptive: true, coordinated: true, tuned: true },
     decTab: 'adaptive',
-    chartMetric: 'queue',     // 'queue' | 'delay' | 'co2'
+    chartMetric: 'delay',     // delay | throughput | maxq | co2 | wasted
+    chartMode: 'abs',         // 'abs' (Verlauf) | 'cum' (kumuliert)
     zoom: null,               // {from, to} minutes-of-day, null = whole window
     playing: false,
     speed: 1,
@@ -280,6 +281,7 @@
     }
 
     applyPayload(payload, usedDemo);
+    clearDirty();
     setBusy(false);
     renderBadges();
   }
@@ -313,8 +315,9 @@
     state.metaGenerated = (res.meta && res.meta.generated) || (usedDemo ? 'offline demo' : '');
     state.selectedDecision = Math.max(0, state.decisions.length - 1);
     if (state.availablePolicies.indexOf(state.decTab) < 0) state.decTab = 'adaptive';
-    // zoom follows the new window
+    // zoom follows the new window; series cache invalid
     state.zoom = null;
+    state.seriesCache = {};
     const zf = $('zoom-from'), zt = $('zoom-to');
     if (zf && zt && res.meta && res.meta.time_from) {
       zf.value = res.meta.time_from;
@@ -978,7 +981,6 @@
       const f0 = state.framesBy[vis[0].key];
       const f = f0[frameIndex(f0)];
       $('playhead-phase').textContent = PHASE_LABEL[f.phase] || f.phase || '–';
-      $('playhead-t').textContent = 't ' + timeStr(state.t) + ' / ' + timeStr(state.duration);
       const qel = $('playhead-queue');
       if (qel) {
         let tot = 0;
@@ -1073,17 +1075,71 @@
     ctx.fillText(label, x + 15, y + 5);
   }
 
-  // Verlauf: Flächendiagramm je Strategie — Warteschlangen zum Zeitpunkt oder
-  // kumulierte Verzögerung/CO₂ ("Burn-up"), x-Achse Uhrzeit, mit von–bis-Zoom.
+  // Verlauf-Panel: alle fünf KPIs, je einmal als Momentanwert (Verlauf) und
+  // einmal kumuliert — x-Achse Uhrzeit, Flächen je Strategie, von–bis-Zoom.
   const CHART_METRICS = {
-    queue: { title: 'Warteschlangen', note: 'veh in Warteschlangen', unit: 'veh', dec: 0, cum: false,
-      val: (f, q) => q },
-    delay: { title: 'Verzögerung', note: 'kumuliert · veh·s', unit: 'veh·s', dec: 0, cum: true,
-      val: (f) => f.delay_s || 0 },
-    co2: { title: 'CO₂-Proxy', note: 'kumuliert · g', unit: 'g', dec: 0, cum: true,
-      val: (f, q) => (f.delay_s || 0) * (state.result && state.result.config
-        ? state.result.config.co2_idle_g_per_s || 1.15 : 1.15) },
+    delay: {
+      title: 'Verzögerung',
+      abs: { note: 'wartende Fahrzeuge (Rate, veh)', dec: 1, get: (p) => p.qTot },
+      cum: { note: 'kumuliert · veh·s', dec: 0, get: (p) => p.delayCum },
+    },
+    throughput: {
+      title: 'Durchsatz',
+      abs: { note: 'Fahrzeuge/h (momentan)', dec: 0, get: (p) => p.servedInst },
+      cum: { note: 'Fahrzeuge/h (Ø bis t)', dec: 0, get: (p) => p.thruCum },
+    },
+    maxq: {
+      title: 'max. Queue',
+      abs: { note: 'längste Warteschlange (veh)', dec: 1, get: (p) => p.qMax },
+      cum: { note: 'Rekord bis t (veh)', dec: 1, get: (p) => p.maxRun },
+    },
+    co2: {
+      title: 'CO₂-Proxy',
+      abs: { note: 'Leerlauf-Ausstoß je Frame (g)', dec: 1, get: (p) => p.co2Abs },
+      cum: { note: 'kumuliert · g', dec: 0, get: (p) => p.co2Cum },
+    },
+    wasted: {
+      title: 'Leerlauf-Grün',
+      abs: { note: 'verschwendetes Grün je Frame (s)', dec: 0, get: (p) => p.wastedAbs },
+      cum: { note: 'kumuliert · s', dec: 0, get: (p) => p.wastedCum },
+    },
   };
+
+  // derived per-frame series per policy (cached until the next payload)
+  function policySeries(pol) {
+    state.seriesCache = state.seriesCache || {};
+    if (state.seriesCache[pol]) return state.seriesCache[pol];
+    const k = (state.result && state.result.config &&
+               state.result.config.co2_idle_g_per_s) || 1.15;
+    const fr = state.framesBy[pol] || [];
+    let servedSum = 0, wastedSum = 0, maxRun = 0;
+    const pts = fr.map((f) => {
+      const qs = f.q || {};
+      let qTot = 0, qMax = 0;
+      for (const key in qs) { qTot += qs[key] || 0; if ((qs[key] || 0) > qMax) qMax = qs[key]; }
+      const served = f.served || 0;
+      servedSum += served;
+      const elapsedH = ((f.t || 0) + state.frameDt) / 3600;
+      let wastedAbs = 0;
+      if (f.green && f.green.length && f.green.every((mv) => (qs[mv] || 0) < 0.5)) {
+        wastedAbs = state.frameDt;
+      }
+      wastedSum += wastedAbs;
+      if (qMax > maxRun) maxRun = qMax;
+      return {
+        m: clockMinAt(f.t || 0),
+        qTot, qMax,
+        servedInst: served / Math.max(1, state.frameDt) * 3600,
+        thruCum: servedSum / Math.max(1e-9, elapsedH),
+        delayCum: f.delay_s || 0,
+        co2Abs: qTot * k, co2Cum: (f.delay_s || 0) * k,
+        wastedAbs, wastedCum: wastedSum,
+        maxRun,
+      };
+    });
+    state.seriesCache[pol] = pts;
+    return pts;
+  }
 
   // minutes-of-day for sim second t (null when no window is configured)
   function clockMinAt(t) {
@@ -1108,7 +1164,8 @@
     ctx.clearRect(0, 0, w, h);
     const pols = chartPolicies().filter((p) => (state.framesBy[p.key] || []).length);
     if (!pols.length) { centerText(ctx, w, h, 'Keine Daten'); return; }
-    const met = CHART_METRICS[state.chartMetric] || CHART_METRICS.queue;
+    const met = CHART_METRICS[state.chartMetric] || CHART_METRICS.delay;
+    const view = state.chartMode === 'cum' ? met.cum : met.abs;
 
     const padL = 52, padR = 14, padT = 26, padB = 30;
     const plotW = w - padL - padR, plotH = h - padT - padB;
@@ -1121,20 +1178,17 @@
       ? clockMinAt(state.duration) : 1440) || 1440);
     if (x1m <= x0m) { centerText(ctx, w, h, 'Zoom-Bereich leer'); return; }
 
-    // series (queue lightly smoothed; signal cycles add sawtooth noise)
+    // series (lightly smoothed; signal cycles add sawtooth noise)
+    const W = (state.chartMetric === 'wasted' && state.chartMode === 'abs') ? 1 : 3;
     const series = pols.map((p) => {
-      const raw = state.framesBy[p.key].map((f) => ({
-        m: clockMinAt(f.t || 0),
-        v: met.val(f, Object.keys(f.q || {}).reduce((s, k) => s + (f.q[k] || 0), 0)),
-      }));
-      const W = met.cum ? 1 : 3;
+      const raw = policySeries(p.key);
       const pts = [];
       for (let i = 0; i < raw.length; i++) {
         const r = raw[i];
         if (r.m == null || r.m < z0 || r.m > z1) continue;
         let sum = 0, n = 0;
         for (let k = Math.max(0, i - W + 1); k <= Math.min(raw.length - 1, i + W - 1); k++) {
-          sum += raw[k].v; n++;
+          sum += view.get(raw[k]); n++;
         }
         pts.push({ m: r.m, v: sum / n });
       }
@@ -1152,7 +1206,7 @@
     for (let i = 0; i <= 4; i++) {
       const y = padT + plotH * i / 4;
       line(ctx, padL, y, padL + plotW, y);
-      ctx.fillText(fmt(yMax * (1 - i / 4), met.dec), padL - 7, y);
+      ctx.fillText(fmt(yMax * (1 - i / 4), view.dec), padL - 7, y);
     }
     // x labels (clock within the zoom window)
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
@@ -1202,7 +1256,7 @@
       lx += 26 + ctx.measureText(s.p.label).width + 22;
     }
     ctx.fillStyle = COL.txt; ctx.font = '10px ' + FONT; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillText(met.note, w - padR, 10);
+    ctx.fillText(view.note, w - padR, 10);
   }
 
   /* ===========================================================================
@@ -1356,7 +1410,7 @@
     for (const p of PHASE_ORDER) {
       const val = pressures ? (pressures[p] || 0) : null;
       const tr = document.createElement('tr');
-      const barW = val !== null ? Math.round(70 * clamp(val / maxP, 0, 1)) : 0;
+      const barW = val !== null ? Math.round(150 * clamp(val / maxP, 0, 1)) : 0;
       tr.innerHTML =
         `<td>${PHASE_LABEL[p] || p}</td>` +
         `<td><div class="bar" style="width:${barW}px"></div></td>` +
@@ -1539,19 +1593,15 @@
       $('val-seed').textContent = seed.value;
       [load, seed].forEach(setRangeFill);
     };
-    [load, seed].forEach((el) => el.addEventListener('input', sync));
+    [load, seed].forEach((el) => el.addEventListener('input', () => { sync(); markDirty(); }));
     sync();
 
-    let timer = null;
-    const schedule = () => { clearTimeout(timer); timer = setTimeout(runSimulation, 300); };
-    load.addEventListener('input', schedule);
-    seed.addEventListener('input', schedule);
-    if (source) source.addEventListener('change', runSimulation);
+    if (source) source.addEventListener('change', markDirty);
     const scen = document.getElementById('ctl-scenario');
     if (scen) scen.addEventListener('change', applyScenarioPreset);
     ['ctl-mix', 'ctl-tsp', 'ctl-junction'].forEach(function (id) {
       const el = document.getElementById(id);
-      if (el) el.addEventListener('change', runSimulation);
+      if (el) el.addEventListener('change', markDirty);
     });
   }
 
@@ -1836,10 +1886,25 @@
     freizeit:      { dow: 'sa', from: '09:00', to: '21:00', holiday: false },
   };
 
+  /* --- dirty tracking: Änderungen starten NICHT automatisch — der
+     Simulieren-Button tut es. Nur der erste Seitenaufruf läuft von selbst. --- */
+  function markDirty() {
+    const hint = $('run-hint');
+    if (hint) { hint.textContent = 'Parameter geändert – „Simulieren“ drücken'; hint.classList.remove('hidden'); }
+    const btn = $('btn-simulate');
+    if (btn) btn.classList.add('dirty');
+  }
+  function clearDirty() {
+    const hint = $('run-hint');
+    if (hint) { hint.textContent = ''; hint.classList.add('hidden'); }
+    const btn = $('btn-simulate');
+    if (btn) btn.classList.remove('dirty');
+  }
+
   function applyScenarioPreset() {
     presetWindow();
     updateTimeHint();
-    runSimulation();
+    markDirty();
   }
 
   // set the window inputs from the scenario without triggering a run
@@ -1872,7 +1937,7 @@
     const ids = ['ctl-dow', 'ctl-time-from', 'ctl-time-to', 'ctl-holiday'];
     ids.forEach((id) => {
       const el = $(id);
-      if (el) el.addEventListener('change', () => { updateTimeHint(); runSimulation(); });
+      if (el) el.addEventListener('change', () => { updateTimeHint(); markDirty(); });
     });
     presetWindow();           // Fenster passend zum Start-Szenario (kein Auto-Run)
     updateTimeHint();
@@ -1924,11 +1989,19 @@
       });
     });
 
-    // time-series chart: metric chips + von–bis zoom
+    // time-series chart: metric chips + Verlauf/Kumuliert + von–bis zoom
     document.querySelectorAll('.chart-metrics .met-btn').forEach((b) => {
       b.addEventListener('click', () => {
         state.chartMetric = b.dataset.met;
         document.querySelectorAll('.chart-metrics .met-btn').forEach((x) =>
+          x.classList.toggle('active', x === b));
+        renderCharts();
+      });
+    });
+    document.querySelectorAll('.chart-mode .cmode-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        state.chartMode = b.dataset.cmode;
+        document.querySelectorAll('.chart-mode .cmode-btn').forEach((x) =>
           x.classList.toggle('active', x === b));
         renderCharts();
       });

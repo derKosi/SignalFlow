@@ -585,8 +585,6 @@
     }
 
     // Readouts
-    const tEl = $('playhead-t');
-    if (tEl) tEl.textContent = 't ' + timeStr(state.t) + ' / ' + timeStr(state.steps);
     const cEl = $('playhead-clock');
     if (cEl) {
       const c = clockString(state.t);
@@ -1252,12 +1250,13 @@
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', markDirty);
     });
-    // switching region is a deliberate action -> load it right away
+    // region switch is a deliberate action, but does not auto-run either:
+    // mark dirty and let the user press Simulieren (keeps big nets snappy)
     region.addEventListener('change', function () {
       const id = region.value;
       state.regionMeta = state.regions.find(function (r) { return r.id === id; }) || { id: id };
       renderStats();
-      runSimulation();
+      markDirty();
     });
     const regionFilter = $('region-filter');
     if (regionFilter) regionFilter.addEventListener('input', function (e) {
