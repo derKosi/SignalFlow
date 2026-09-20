@@ -1334,10 +1334,18 @@
   // switch reasons fall into four honest categories (colour-coded everywhere)
   function decisionCat(reason) {
     const r = reason || '';
-    if (r.indexOf('bus priority') >= 0) return { cls: 'cat-tsp', label: 'Bus TSP' };
-    if (r.indexOf('max green') >= 0) return { cls: 'cat-max', label: 'Max-Grün' };
-    if (r.indexOf('served out') >= 0) return { cls: 'cat-empty', label: 'Leer gelaufen' };
-    return { cls: 'cat-pressure', label: 'Druck' };
+    if (r.indexOf('bus priority') >= 0) return {
+      cls: 'cat-tsp', label: 'Bus-Priorität (TSP)',
+      tip: 'Eine Phase mit wartendem Bus hat Vorrang bekommen (Transit Signal Priority).' };
+    if (r.indexOf('max green') >= 0) return {
+      cls: 'cat-max', label: 'Max-Grün erreicht',
+      tip: 'Die Phase lief an ihre Obergrenze (max. Grün), damit andere Richtungen drankommen.' };
+    if (r.indexOf('served out') >= 0) return {
+      cls: 'cat-empty', label: 'Früh beendet',
+      tip: 'Keine wartenden Fahrzeuge mehr in dieser Phase — Grün wurde vorzeitig beendet und Leerlauf-Grün gespart.' };
+    return {
+      cls: 'cat-pressure', label: 'Konkurrierender Druck',
+      tip: 'Eine Folgephase hatte deutlich höheren Warteschlangen-Druck als die laufende Phase (Hysterese überschritten).' };
   }
 
   function renderDecisionList() {
@@ -1361,13 +1369,14 @@
         const c = decisionCat(d.reason);
         counts[c.cls] = (counts[c.cls] || 0) + 1;
       }
-      legend.innerHTML = Object.keys(counts).map((cls) => {
-        const meta = decisionCat(
-          cls === 'cat-tsp' ? 'bus priority' : cls === 'cat-max' ? 'max green'
-            : cls === 'cat-empty' ? 'served out' : 'pressure');
-        return `<span class="lg"><i class="${cls}"></i>${meta.label} · ${counts[cls]}</span>`;
-      }).join('') +
-      `<span class="lg faint">erste ${decs.length} Wechsel (max. 200 protokolliert)</span>`;
+      legend.innerHTML = '<span class="lg lead">Umschalt-Gründe:</span>' +
+        Object.keys(counts).map((cls) => {
+          const meta = decisionCat(
+            cls === 'cat-tsp' ? 'bus priority' : cls === 'cat-max' ? 'max green'
+              : cls === 'cat-empty' ? 'served out' : 'pressure');
+          return `<span class="lg" title="${meta.tip}"><i class="${cls}"></i>${meta.label} · ${counts[cls]}</span>`;
+        }).join('') +
+        `<span class="lg faint">erste ${decs.length} Wechsel (max. 200 protokolliert)</span>`;
     }
     // newest first
     for (let i = decs.length - 1; i >= 0; i--) {
@@ -1380,7 +1389,7 @@
       li.innerHTML =
         `<div class="head"><span class="t">${clockString(d.t) || timeStr(d.t)}</span>` +
         `<span class="swap">${d.from || '–'}<span class="arrow">→</span>${d.to || '–'}</span>` +
-        `<span class="cat ${cat.cls}">${cat.label}</span></div>` +
+        `<span class="cat ${cat.cls}" title="${cat.tip}">${cat.label}</span></div>` +
         `<div class="why">${escapeHtml(d.reason || '')}</div>`;
       li.addEventListener('click', () => {
         state.selectedDecision = i;
