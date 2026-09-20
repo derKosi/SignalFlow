@@ -252,7 +252,8 @@
   <section class="charts">
     <div class="panel chart-panel">
       <h2>Kennzahlen im Vergleich</h2>
-      <p class="panel-sub">Jede Gruppe = eine Kennzahl, jeder Balken = eine Strategie (Farbe siehe Legende). Balkenhöhen sind je Kennzahl eigen-skaliert — vergleichen wird innerhalb der Gruppe; der kürzeste Balken bei „weniger ist besser“ ist der Sieger.</p>
+      <p class="panel-sub">Jede Gruppe = eine Kennzahl, jeder Balken = eine Strategie. Balkenhöhen sind je Kennzahl eigen-skaliert — verglichen wird innerhalb der Gruppe; der kürzeste Balken bei „weniger ist besser“ ist der Sieger.</p>
+      <div class="pol-filter" id="pol-filter-bars"></div>
       <canvas id="chart-bars"></canvas>
     </div>
     <div class="panel chart-panel">
@@ -277,6 +278,7 @@
           <button id="zoom-reset" class="btn ghost" type="button" title="ganzes Zeitfenster">Reset</button>
         </div>
       </div>
+      <div class="pol-filter" id="pol-filter-delay"></div>
       <canvas id="chart-delay"></canvas>
     </div>
   </section>

@@ -339,7 +339,7 @@
     renderKPIs();
     renderCharts();
     renderDecisions();
-    syncPolicyButtons();
+    renderPolFilters();
     renderMeta(usedDemo);
     if (state.autoSpeak && window.SFAsk) SFAsk.speakResult();
     // auto-ask? no. keep user driven.
@@ -1073,13 +1073,6 @@
     // baseline
     ctx.strokeStyle = COL.axis;
     line(ctx, padL, padT + plotH, padL + plotW, padT + plotH);
-
-    // legend (dynamic, left to right)
-    let lx = padL;
-    for (const p of pols) {
-      legendSwatch(ctx, lx, 10, p.color, p.label);
-      lx += 26 + ctx.measureText(p.label).width + 22;
-    }
   }
 
   function legendSwatch(ctx, x, y, color, label) {
@@ -1263,14 +1256,9 @@
       ctx.setLineDash([]);
     }
 
-    // legend + axis note
-    let lx = padL;
-    for (const s of series) {
-      legendSwatch(ctx, lx, 10, s.p.color, s.p.label);
-      lx += 26 + ctx.measureText(s.p.label).width + 22;
-    }
+    // axis note (strategy chips live in the HTML filter row above)
     ctx.fillStyle = COL.txt; ctx.font = '10px ' + FONT; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillText(view.note, w - padR, 10);
+    ctx.fillText(view.note, w - padR, 12);
   }
 
   /* ===========================================================================
@@ -1898,7 +1886,37 @@
   /* ===========================================================================
    * 15) EVENT WIRING + INIT
    * ======================================================================== */
-  // reflect visibility/availability on the strategy toggle buttons
+  // one toggle state for viewer canvases AND the chart-card filters
+  function applyPolicyToggle(pol) {
+    if (pol === 'all') {
+      for (const p of POLICY_META) {
+        if (state.availablePolicies.indexOf(p.key) >= 0) state.visible[p.key] = true;
+      }
+    } else {
+      state.visible[pol] = !state.visible[pol];
+      if (!POLICY_META.some((p) => state.visible[p.key])) state.visible[pol] = true;
+    }
+    syncPolicyButtons();
+    renderCharts();
+  }
+
+  // interactive strategy chips on the two evaluation cards (replace the old
+  // canvas-drawn legends)
+  function renderPolFilters() {
+    document.querySelectorAll('.pol-filter').forEach((box) => {
+      box.innerHTML = POLICY_META
+        .filter((p) => state.availablePolicies.indexOf(p.key) >= 0)
+        .map((p) => `<button type="button" class="pfilter" data-pol="${p.key}" ` +
+          `title="${p.label} ein-/ausblenden">` +
+          `<i class="pdot" style="background:${p.color}"></i>${p.label}</button>`).join('') +
+        '<button type="button" class="pfilter all" data-pol="all" title="alle einblenden">Alle</button>';
+      box.querySelectorAll('.pfilter').forEach((b) =>
+        b.addEventListener('click', () => applyPolicyToggle(b.dataset.pol)));
+    });
+    syncPolicyButtons();
+  }
+
+  // reflect visibility/availability on every strategy toggle (viewer + cards)
   function syncPolicyButtons() {
     document.querySelectorAll('.policy-modes .pol-btn').forEach((b) => {
       const pol = b.dataset.pol;
@@ -1912,6 +1930,16 @@
       b.disabled = !avail;
       b.classList.toggle('active', avail && !!state.visible[pol]);
       b.title = avail ? b.title : 'Für den Kreisverkehr-Vergleich nicht vorhanden';
+    });
+    document.querySelectorAll('.pfilter').forEach((b) => {
+      const pol = b.dataset.pol;
+      if (pol === 'all') {
+        b.classList.toggle('active',
+          state.availablePolicies.length > 0 &&
+          state.availablePolicies.every((k) => state.visible[k]));
+        return;
+      }
+      b.classList.toggle('active', state.visible[pol] === true);
     });
   }
   // dark ⇄ light theme (persisted; canvases stay dark "monitors")
@@ -2016,22 +2044,9 @@
       });
     });
 
-    // strategy toggles: show/hide each controller's canvas + chart series,
-    // "Alle" = all on
+    // strategy toggles: viewer canvases + both chart cards share one state
     document.querySelectorAll('.policy-modes .pol-btn').forEach((b) => {
-      b.addEventListener('click', () => {
-        const pol = b.dataset.pol;
-        if (pol === 'all') {
-          for (const p of POLICY_META) {
-            if (state.availablePolicies.indexOf(p.key) >= 0) state.visible[p.key] = true;
-          }
-        } else {
-          state.visible[pol] = !state.visible[pol];
-          if (!POLICY_META.some((p) => state.visible[p.key])) state.visible[pol] = true;
-        }
-        syncPolicyButtons();
-        renderCharts();
-      });
+      b.addEventListener('click', () => applyPolicyToggle(b.dataset.pol));
     });
 
     // decision-log tabs (adaptive switch log vs. the other strategies' plans)
