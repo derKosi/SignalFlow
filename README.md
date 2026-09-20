@@ -13,6 +13,16 @@ timing is fixed rather than responsive.
 
 ---
 
+## Live demo
+
+**Try it directly in your browser — no install:** **<https://signalflow.complykit.de>**
+
+Both dashboards (junction & OSM network) are fully interactive. The LLM-powered
+"explain" panel may fall back to the built-in offline explainer when no API key
+is configured on the demo host.
+
+---
+
 ## Headline result (default scenario: 30 min, rush-hour peak)
 
 Both controllers face the **identical** arrival stream (same seed), so the
