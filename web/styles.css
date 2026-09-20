@@ -111,6 +111,7 @@ code{ font-family: var(--mono); font-size:.9em; color: var(--accent-2); }
   padding:9px 15px; cursor:pointer; transition:.15s;
   display:inline-flex; align-items:center; gap:8px;
 }
+a.btn{ text-decoration:none; }   /* Topbar-Links nicht unterstreichen */
 .btn:hover{ border-color:#2f4256; background:#1b2837; }
 .btn:disabled{ opacity:.5; cursor:not-allowed; }
 .btn.primary{
@@ -394,7 +395,15 @@ body[data-theme="light"] .zoom-row input[type=time]{ color-scheme:light; }
 .dec-view{ display:grid; grid-template-columns: 1.4fr 1fr; gap:14px; align-items:stretch; width:100%; }
 /* Plan-Karten (Fixed/Koord./Tuned) nutzen die volle Kartenbreite */
 .dec-view .plan-box, .decisions-body .plan-box{ grid-column: 1 / -1; }
-.dec-view .dec-list-col{ grid-column:1; min-width:0; }
+.dec-view .dec-list-col{ grid-column:1; min-width:0; position:relative; }
+/* Scrollbalken unsichtbar, Wheel-Scroll bleibt; Fade deutet mehr Inhalt an */
+.dec-list-col.scrollable::after{
+  content:''; position:absolute; left:10px; right:1px; bottom:0; height:30px;
+  background:linear-gradient(180deg, transparent, var(--panel));
+  pointer-events:none;
+}
+.decision-list{ scrollbar-width:none; -ms-overflow-style:none; }
+.decision-list::-webkit-scrollbar{ width:0; height:0; display:none; }
 .dec-view .pressure-box{ grid-column:2; display:flex; flex-direction:column; }
 .dec-view .adaptive-stats{ margin-top:auto; padding-top:14px; }
 /* Protokoll-Legende: Umschalt-Kategorien mit echten Anzahlungen */

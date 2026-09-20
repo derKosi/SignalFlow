@@ -1389,6 +1389,9 @@
       list.appendChild(li);
     }
     renderPressureTable(decs[state.selectedDecision]);
+    // fade only when the list actually overflows
+    const col = list.closest('.dec-list-col');
+    if (col) col.classList.toggle('scrollable', list.scrollHeight > list.clientHeight + 4);
   }
 
   // plan card for fixed / coordinated / tuned (from the engine's plan info)
