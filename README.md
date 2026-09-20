@@ -11,11 +11,13 @@ timing is fixed rather than responsive.
 
 > Zero dependencies. Python 3.11+ standard library only. No `pip install`, no build step.
 
----
+## 🎬 Live demo
 
-## Live demo
+**<https://signalflow.complykit.de>** — hosted, ready to click:
 
-**Try it directly in your browser — no install:** **<https://signalflow.complykit.de>**
+* [Single-junction dashboard](https://signalflow.complykit.de/) — four strategies on identical traffic, decision log, PDF report
+* [District simulation](https://signalflow.complykit.de/network.html) — real OSM networks (add your own place live), node drill-down, OSM underlay
+* [Writeup](https://signalflow.complykit.de/writeup.html) — switchable DE/EN, simple & detailed, jury view
 
 Both dashboards (junction & OSM network) are fully interactive. The LLM-powered
 "explain" panel may fall back to the built-in offline explainer when no API key
