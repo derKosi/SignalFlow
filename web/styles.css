@@ -289,7 +289,8 @@ table.kpi-table tr.pol-tuned td.v{ color:#a78bfa; }
 /* Karten: Wert + Δ übereinander rechtsbündig */
 .kpi .val{ display:flex; flex-direction:column; align-items:flex-end; line-height:1.3; }
 /* Gewinner je Kennzahl: fettester Wert der Spalte (Tabelle + Karten) */
-table.kpi-table .best{ font-weight:700; }
+table.kpi-table .best{ font-weight:800; }
+table.kpi-table td.v.best{ text-shadow:0 0 10px rgba(230,237,243,.22); }
 .kpi .row b.best{ font-weight:800; text-shadow:0 0 12px rgba(45,212,191,.35); }
 
 /* ------------------------------ viewer ------------------------------ */
@@ -389,8 +390,35 @@ body[data-theme="light"] .zoom-row input[type=time]{ color-scheme:light; }
 .bottom{ display:grid; grid-template-columns: 1.15fr 1fr; gap:16px; }
 .decisions-body{ display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; }
 .dec-view{ display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; align-items:stretch; }
-.dec-view .decision-list{ grid-column:1; }
+.dec-view .dec-list-col{ grid-column:1; min-width:0; }
 .dec-view .pressure-box{ grid-column:2; }
+/* Protokoll-Legende: Umschalt-Kategorien mit echten Anzahlungen */
+.decision-legend{ display:flex; flex-wrap:wrap; gap:6px 12px; margin:0 0 10px; align-items:center; }
+.decision-legend .lg{ display:inline-flex; align-items:center; gap:6px; font-size:11.5px; color:var(--muted); }
+.decision-legend .lg.faint{ color:var(--faint); font-size:10.5px; }
+.decision-legend .lg i{ width:9px; height:12px; border-radius:3px; display:inline-block; }
+.decision-legend .lg i.cat-pressure{ background:var(--accent); }
+.decision-legend .lg i.cat-empty{ background:var(--yellow); }
+.decision-legend .lg i.cat-max{ background:var(--red); }
+.decision-legend .lg i.cat-tsp{ background:var(--accent-2); }
+/* Kategorie-Streifen + Chip je Decision-Item */
+.decision-item{ position:relative; }
+.decision-item::before{
+  content:''; position:absolute; left:0; top:9px; bottom:9px; width:3px;
+  border-radius:2px; background:var(--faint); opacity:.7;
+}
+.decision-item.cat-pressure::before{ background:var(--accent); opacity:1; }
+.decision-item.cat-empty::before{ background:var(--yellow); opacity:1; }
+.decision-item.cat-max::before{ background:var(--red); opacity:1; }
+.decision-item.cat-tsp::before{ background:var(--accent-2); opacity:1; }
+.decision-item .cat{
+  font-size:9.5px; text-transform:uppercase; letter-spacing:.6px;
+  padding:2px 8px; border-radius:999px; border:1px solid; margin-left:auto;
+}
+.decision-item .cat.cat-pressure{ color:var(--accent); border-color:rgba(45,212,191,.4); }
+.decision-item .cat.cat-empty{ color:var(--yellow); border-color:rgba(245,158,11,.4); }
+.decision-item .cat.cat-max{ color:var(--red); border-color:rgba(239,68,68,.4); }
+.decision-item .cat.cat-tsp{ color:var(--accent-2); border-color:rgba(56,189,248,.4); }
 /* Plan-Karte (Fixed / Koord. / Tuned im Protokoll-Reiter) */
 .plan-box{ padding:2px 0; }
 .plan-box[hidden]{ display:none; }
@@ -421,10 +449,12 @@ body[data-theme="light"] .zoom-row input[type=time]{ color-scheme:light; }
 .foot .foot-note{ display:block; margin-top:4px; color:var(--faint); font-size:11.5px; }
 .foot .foot-note a{ color:var(--muted); }
 .decision-item{
-  border:1px solid var(--line-soft); border-radius:9px; padding:9px 11px;
+  border:1px solid var(--line-soft); border-radius:9px; padding:9px 11px 9px 15px;
   background:var(--panel-2); cursor:pointer; transition:.15s;
 }
 .decision-item:hover{ border-color:#2f4256; }
+.decision-item .head .t{ background:rgba(56,189,248,.08); border:1px solid rgba(56,189,248,.25); border-radius:6px; padding:1px 7px; }
+.decision-item .swap{ font-weight:600; }
 .decision-item.active{ border-color:var(--accent); box-shadow:0 0 0 1px rgba(45,212,191,.35) inset; }
 .decision-item .head{ display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap; }
 .decision-item .t{ font-family:var(--mono); font-size:11.5px; color:var(--accent-2); }
@@ -439,7 +469,10 @@ table.pressures th, table.pressures td{ padding:6px 6px; text-align:left; border
 table.pressures th{ color:var(--faint); font-weight:500; font-size:11px; text-transform:uppercase; letter-spacing:.5px; }
 table.pressures td.p{ font-family:var(--mono); text-align:right; }
 table.pressures td.w{ font-family:var(--mono); color:var(--muted); text-align:right; }
-table.pressures .bar{ height:6px; border-radius:3px; background:var(--accent); opacity:.75; }
+table.pressures .bar{
+  height:8px; border-radius:4px; opacity:.85;
+  background:linear-gradient(90deg, rgba(45,212,191,.45), var(--accent));
+}
 
 /* -------------------------------- ask ------------------------------ */
 .ask-row{ display:flex; gap:9px; }

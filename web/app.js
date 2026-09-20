@@ -422,7 +422,8 @@
     const pols = activePolicies();
     const head = KPI_META.map((m) =>
       `<th colspan="2" title="${m.info}">${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
-    const subHeads = KPI_META.map(() => '<th class="sub">Wert</th><th class="sub">Δ</th>').join('');
+    const subHeads = KPI_META.map(() =>
+      '<th class="sub">Wert</th><th class="sub" title="Veränderung gegenüber Fixed — positiv = besser (bei „weniger ist besser“-Kennzahlen bedeutet + also einen kleineren Wert)">Δ (+ = besser)</th>').join('');
     const bodyRows = pols.map((p) => {
       const cells = KPI_META.map((m) => {
         const dlt = p.key === 'fixed'
@@ -1317,11 +1318,22 @@
       '</table>';
   }
 
+  // switch reasons fall into four honest categories (colour-coded everywhere)
+  function decisionCat(reason) {
+    const r = reason || '';
+    if (r.indexOf('bus priority') >= 0) return { cls: 'cat-tsp', label: 'Bus TSP' };
+    if (r.indexOf('max green') >= 0) return { cls: 'cat-max', label: 'Max-Grün' };
+    if (r.indexOf('served out') >= 0) return { cls: 'cat-empty', label: 'Leer gelaufen' };
+    return { cls: 'cat-pressure', label: 'Druck' };
+  }
+
   function renderDecisionList() {
     const list = $('decisions-list');
+    const legend = $('decision-legend');
     list.innerHTML = '';
     const decs = state.decisions || [];
     if (!decs.length) {
+      if (legend) legend.innerHTML = '';
       const unsig = state.junction && state.junction.signalized === false;
       list.innerHTML = unsig
         ? '<li class="empty">Kreisverkehr: keine Ampel — Einfahrten sind yield-regelt.</li>'
@@ -1329,15 +1341,33 @@
       renderPressureTable(null);
       return;
     }
+    // legend with real counts (first 200 logged switches)
+    if (legend) {
+      const counts = {};
+      for (const d of decs) {
+        const c = decisionCat(d.reason);
+        counts[c.cls] = (counts[c.cls] || 0) + 1;
+      }
+      legend.innerHTML = Object.keys(counts).map((cls) => {
+        const meta = decisionCat(
+          cls === 'cat-tsp' ? 'bus priority' : cls === 'cat-max' ? 'max green'
+            : cls === 'cat-empty' ? 'served out' : 'pressure');
+        return `<span class="lg"><i class="${cls}"></i>${meta.label} · ${counts[cls]}</span>`;
+      }).join('') +
+      `<span class="lg faint">erste ${decs.length} Wechsel (max. 200 protokolliert)</span>`;
+    }
     // newest first
     for (let i = decs.length - 1; i >= 0; i--) {
       const d = decs[i];
+      const cat = decisionCat(d.reason);
       const li = document.createElement('li');
-      li.className = 'decision-item' + (i === state.selectedDecision ? ' active' : '');
+      li.className = 'decision-item ' + cat.cls +
+        (i === state.selectedDecision ? ' active' : '');
       li.dataset.idx = String(i);
       li.innerHTML =
         `<div class="head"><span class="t">${clockString(d.t) || timeStr(d.t)}</span>` +
-        `<span class="swap">${d.from || '–'}<span class="arrow">→</span>${d.to || '–'}</span></div>` +
+        `<span class="swap">${d.from || '–'}<span class="arrow">→</span>${d.to || '–'}</span>` +
+        `<span class="cat ${cat.cls}">${cat.label}</span></div>` +
         `<div class="why">${escapeHtml(d.reason || '')}</div>`;
       li.addEventListener('click', () => {
         state.selectedDecision = i;
