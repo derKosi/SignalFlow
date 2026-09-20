@@ -388,8 +388,10 @@ body[data-theme="light"] .zoom-row input[type=time]{ color-scheme:light; }
 
 /* ------------------------- bottom two panels ------------------------ */
 .bottom{ display:grid; grid-template-columns: 1.15fr 1fr; gap:16px; }
-.decisions-body{ display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; }
-.dec-view{ display:grid; grid-template-columns: 1.2fr 1fr; gap:14px; align-items:stretch; }
+/* außen block: der Adaptiv-View darf die volle Kartenbreite nutzen — die
+   zweite Grid-Spur gehört allein den (ausgeblendeten) Plan-Karten */
+.decisions-body{ display:block; }
+.dec-view{ display:grid; grid-template-columns: 1.4fr 1fr; gap:14px; align-items:stretch; width:100%; }
 /* Plan-Karten (Fixed/Koord./Tuned) nutzen die volle Kartenbreite */
 .dec-view .plan-box, .decisions-body .plan-box{ grid-column: 1 / -1; }
 .dec-view .dec-list-col{ grid-column:1; min-width:0; }

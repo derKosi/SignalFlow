@@ -118,9 +118,11 @@
             <option value="cross4">Kreuzung (geschützte Linksabbieger)</option>
             <option value="cross4_permissive">Kreuzung (permissive Linksabbieger)</option>
             <option value="t3">T-Kreuzung (3 Arme)</option>
-            <option value="roundabout">Kreisverkehr (unsignalisiert)</option>
+            <!-- Kreisverkehr bewusst ausgeblendet (Vision: Signal vs. Yield auf
+                 Netzwerkebene) — Engine bleibt implementiert und getestet -->
+            <option value="roundabout" hidden>Kreisverkehr (unsignalisiert)</option>
           </select>
-          <span class="desc">beim Kreisverkehr: Signal vs. Yield</span>
+          <span class="desc">permissive Variante deckt Nachgiebigkeit ab</span>
         </div>
 
         <div class="control">

@@ -57,7 +57,12 @@ with zero runtime dependencies).
   phase colours, synced to playback). Possible upgrades: per-node KPIs and
   turn-level movements in the drilldown.
 * MAXBAND-style green-wave optimisation instead of fixed travel-time offsets.
-* Roundabout: geometry-based capacity + gap acceptance (Kimber, Song et al.).
+* **Roundabout als Vollwert-Strategie** (Vision): geometry-based capacity +
+  gap acceptance (Kimber, Song et al.) und der Vergleich Signal vs. Yield auf
+  der *Netzwerk*-Ebene. Die Junction-Engine hält den Kreisverkehr bereits
+  implementiert und getestet (Signal vs. Yield, Ring-Animation korrekt);
+  in der Demo-Umgebung ist der Kreuzungstyp ausgeblendet, um die Vier-Wege-
+  Geschichte sauber zu halten.
 * Close the detector loop (feed as feedback, SCOOT/SCATS-style).
 * Mobile/responsive pass; i18n strings; Dockerfile; PyPI-style release.
 * Multi-corridor joint optimisation + transit routes (bus lines as entities).
