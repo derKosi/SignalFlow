@@ -46,7 +46,7 @@
     <a class="btn ghost" href="writeup.html">Writeup</a>
   </div>
   <button id="btn-theme" class="btn ghost icon" type="button" title="Farbschema wechseln">🌙</button>
-  <button id="btn-export" class="btn ghost" type="button" title="Netzwerkkarte als PNG">⤓ Bild</button>
+  <button id="btn-export" class="btn ghost" type="button" title="PDF-Bericht der aktuellen Netzwerk-Simulation (Randbedingungen, Kennzahlen, Strategien, Karte)">⤓ Bericht</button>
  </div>
 </header>
 
@@ -60,100 +60,122 @@
   <div class="dash net">
   <div class="dash-main">
 
-  <!-- ======================= GEBIET + STEUERLEISTE ======================= -->
-  <section class="panel" aria-label="Simulationsparameter">
-    <div class="region-row">
-      <div class="control region-control">
-        <label for="ctl-region">Gebiet</label>
-        <select id="ctl-region" aria-label="Region"></select>
-        <input id="region-filter" type="text" placeholder="Liste filtern …" aria-label="Gebiete filtern" title="Filtert die Gebietsliste — nützlich, sobald per „Ort hinzufügen“ mehr Einträge entstehen" />
-      </div>
-      <div class="control add-region">
-        <label for="add-place">Ort hinzufügen (OpenStreetMap)</label>
-        <div class="add-row">
-          <input id="add-place" type="text" placeholder="z. B. Tübingen Zentrum" />
-          <button id="btn-add-region" class="btn ghost" type="button">Hinzufügen</button>
+  <!-- ======================= CONTROL BAR ======================= -->
+  <!-- Gleiche Struktur wie die Einzelkreuzung: prominenter Simulieren-Button
+       oben, darunter gruppierte Einstellungen (Gebiet / Nachfrage / Szenerie /
+       Experten) mit Einzeiler-Erklärungen. -->
+  <section class="panel controls" aria-label="Simulationsparameter">
+    <div class="sim-row">
+      <button id="btn-run" class="btn primary sim-run" type="button" title="Simulation mit den gewählten Einstellungen neu rechnen">
+        <span class="btn-label">▶ Simulieren</span>
+      </button>
+      <span id="run-hint" class="run-hint hidden"></span>
+    </div>
+
+    <div class="ctl-group">
+      <h3>Gebiet <span class="grp-sub">echte OpenStreetMap-Netze</span></h3>
+      <div class="ctl-grid ctl-grid-region">
+        <div class="control region-control">
+          <label for="ctl-region">Gebiet</label>
+          <select id="ctl-region" aria-label="Region"></select>
+          <input id="region-filter" type="text" placeholder="Liste filtern …" aria-label="Gebiete filtern" title="Filtert die Gebietsliste — nützlich, sobald per „Ort hinzufügen“ mehr Einträge entstehen" />
+          <span id="region-filter-hint" class="desc"></span>
         </div>
-        <span id="add-status" class="run-hint"></span>
+        <div class="control add-region">
+          <label for="add-place">Ort hinzufügen (OpenStreetMap)</label>
+          <div class="add-row">
+            <input id="add-place" type="text" placeholder="z. B. Tübingen Zentrum" />
+            <button id="btn-add-region" class="btn ghost" type="button">Hinzufügen</button>
+          </div>
+          <span id="add-status" class="run-hint"></span>
+        </div>
       </div>
       <div class="net-stats" id="net-stats" aria-live="polite"></div>
     </div>
 
-    <div class="net-controls">
-      <div class="control">
-        <label for="ctl-scenario" title="Tagestyp: legt die Form des Tagesgangs fest und setzt ein passendes Zeitfenster vor">Szenario (Tagesgang)</label>
-        <select id="ctl-scenario">
-          <option value="normal">Normal (Wochentag, Tagesgeschäft)</option>
-          <option value="berufsverkehr">Berufsverkehr (Mo–Fr, 2 Spitzen)</option>
-          <option value="ferien">Ferien (flau, keine Spitze)</option>
-          <option value="freizeit">Wochenende (Mittagshügel)</option>
-        </select>
-        <span class="desc">setzt Zeitfenster vor, frei anpassbar</span>
-      </div>
-
-      <div class="control time-control">
-        <label for="ctl-time-from" title="Simulierter Zeitraum: die Nachfrage folgt der echten Uhrzeit. Längere Zeiträume werden auf die Simulationsdauer komprimiert — nur die Uhr läuft schneller, die Verkehrsmengen bleiben unverzerrt. 5 min Aufwärmen vor Start.">Zeitfenster (Uhrzeit)</label>
-        <div class="time-row">
-          <select id="ctl-dow" aria-label="Wochentag">
-            <option value="wd">Mo–Fr</option>
-            <option value="sa">Sa</option>
-            <option value="so">So</option>
+    <div class="ctl-group">
+      <h3>Nachfrage <span class="grp-sub">wer kommt wann, wie viele?</span></h3>
+      <div class="ctl-grid">
+        <div class="control">
+          <label for="ctl-scenario" title="Tagestyp: legt die Form des Tagesgangs fest und setzt ein passendes Zeitfenster vor">Szenario (Tagesgang)</label>
+          <select id="ctl-scenario">
+            <option value="normal">Normal (Wochentag, Tagesgeschäft)</option>
+            <option value="berufsverkehr">Berufsverkehr (Mo–Fr, 2 Spitzen)</option>
+            <option value="ferien">Ferien (flau, keine Spitze)</option>
+            <option value="freizeit">Wochenende (Mittagshügel)</option>
           </select>
-          <input id="ctl-time-from" type="time" value="07:00" aria-label="von" />
-          <span class="time-sep">–</span>
-          <input id="ctl-time-to" type="time" value="18:00" aria-label="bis" />
+          <span class="desc">setzt Zeitfenster vor, frei anpassbar</span>
         </div>
-        <span id="time-hint" class="time-hint"></span>
-      </div>
 
-      <div class="control">
-        <label for="ctl-load">Last (×)</label>
-        <input id="ctl-load" type="range" min="0.5" max="1.4" step="0.05" value="1.0" />
-        <output id="val-load" for="ctl-load">1.00</output>
-        <span class="desc">Skaliert die Nachfrage zusätzlich</span>
-      </div>
+        <div class="control time-control">
+          <label for="ctl-time-from" title="Simulierter Zeitraum: die Nachfrage folgt der echten Uhrzeit. Längere Zeiträume werden auf die Simulationsdauer komprimiert — nur die Uhr läuft schneller, die Verkehrsmengen bleiben unverzerrt. 5 min Aufwärmen vor Start.">Zeitfenster (Uhrzeit)</label>
+          <div class="time-row">
+            <select id="ctl-dow" aria-label="Wochentag">
+              <option value="wd">Mo–Fr</option>
+              <option value="sa">Sa</option>
+              <option value="so">So</option>
+            </select>
+            <input id="ctl-time-from" type="time" value="07:00" aria-label="von" />
+            <span class="time-sep">–</span>
+            <input id="ctl-time-to" type="time" value="18:00" aria-label="bis" />
+          </div>
+          <span id="time-hint" class="time-hint"></span>
+        </div>
 
-      <div class="control">
-        <label for="ctl-mix">Fahrzeugmix</label>
-        <select id="ctl-mix">
-          <option value="car">nur Pkw</option>
-          <option value="city">Stadt (Pkw/Van/Lkw/Bus)</option>
-          <option value="truck">Lkw-lastig</option>
-        </select>
-        <span class="desc">schwere Fahrzeuge belegen mehr Platz</span>
-      </div>
+        <div class="control">
+          <label for="ctl-load">Last (×)</label>
+          <input id="ctl-load" type="range" min="0.5" max="1.4" step="0.05" value="1.0" />
+          <output id="val-load" for="ctl-load">1.00</output>
+          <span class="desc">Skaliert die Nachfrage zusätzlich</span>
+        </div>
 
-      <div class="control">
-        <label for="ctl-tsp" title="Bus-Korridor-Priorität">Bus-Priorität</label>
-        <select id="ctl-tsp">
-          <option value="off">aus</option>
-          <option value="on">an (TSP)</option>
-        </select>
-        <span class="desc">Busse warten weniger lange</span>
-      </div>
-
-      <div class="control">
-        <label for="ctl-seed" title="Wirkt aktuell nur im Kreuzungsmodell — das Gebietsmodell ist flussbasiert und vollständig deterministisch (gleiche Parameter → gleiche Ergebnisse)">Seed</label>
-        <input id="ctl-seed" type="range" min="1" max="999" step="1" value="42" />
-        <output id="val-seed" for="ctl-seed">42</output>
-        <span class="desc">ohne Wirkung (deterministisch)</span>
-      </div>
-
-      <div class="control">
-        <label for="ctl-vph">Verkehr (veh/h)</label>
-        <input id="ctl-vph" type="range" min="2000" max="12000" step="250" value="6500" />
-        <output id="val-vph" for="ctl-vph">6500</output>
-        <span class="desc">Gesamtnachfrage ins Netz</span>
+        <div class="control">
+          <label for="ctl-vph">Verkehr (veh/h)</label>
+          <input id="ctl-vph" type="range" min="2000" max="20000" step="250" value="6500" />
+          <output id="val-vph" for="ctl-vph">6500</output>
+          <span class="desc">Gesamtnachfrage ins Netz — hoch drehen erzeugt Stau</span>
+        </div>
       </div>
     </div>
 
-    <div class="run-row">
-      <button id="btn-run" class="btn primary" type="button"><span class="btn-label">Simulieren</span></button>
-      <span id="run-hint" class="run-hint hidden"></span>
+    <div class="ctl-group">
+      <h3>Szenerie <span class="grp-sub">Fahrzeuge &amp; Busse</span></h3>
+      <div class="ctl-grid">
+        <div class="control">
+          <label for="ctl-mix">Fahrzeugmix</label>
+          <select id="ctl-mix">
+            <option value="car">nur Pkw</option>
+            <option value="city">Stadt (Pkw/Van/Lkw/Bus)</option>
+            <option value="truck">Lkw-lastig</option>
+          </select>
+          <span class="desc">schwere Fahrzeuge belegen mehr Platz</span>
+        </div>
+
+        <div class="control">
+          <label for="ctl-tsp" title="Bus-Korridor-Priorität">Bus-Priorität</label>
+          <select id="ctl-tsp">
+            <option value="off">aus</option>
+            <option value="on">an (TSP)</option>
+          </select>
+          <span class="desc">Busse warten weniger lange</span>
+        </div>
+      </div>
     </div>
+
+    <details class="ctl-group expert">
+      <summary>Experten <span class="grp-sub">Zufall</span></summary>
+      <div class="ctl-grid">
+        <div class="control">
+          <label for="ctl-seed" title="Wirkt aktuell nur im Kreuzungsmodell — das Gebietsmodell ist flussbasiert und vollständig deterministisch (gleiche Parameter → gleiche Ergebnisse)">Seed</label>
+          <input id="ctl-seed" type="range" min="1" max="999" step="1" value="42" />
+          <output id="val-seed" for="ctl-seed">42</output>
+          <span class="desc">ohne Wirkung (deterministisch)</span>
+        </div>
+      </div>
+    </details>
   </section>
 
-  <!-- ========================== KPIs (2×3) ========================== -->
+  <!-- ========================== KPIs ========================== -->
   <section class="panel kpi-panel" aria-label="Kennzahlen">
     <div class="kpi-head">
       <h2>Kennzahlen</h2>
@@ -173,36 +195,38 @@
     <div class="viewer-bar">
       <div class="transport">
         <button id="btn-play" class="btn icon" type="button" title="Play/Pause">▶</button>
+
+        <div class="modes policy-modes" role="group" aria-label="Strategien ein- und ausblenden">
+          <button class="mode-btn pol-btn" data-pol="fixed" type="button"
+                  title="Fixed-Time: fester Signalplan, reagiert nicht auf Verkehr"><i class="pdot" style="background:#aab6c4"></i>Fixed</button>
+          <button class="mode-btn pol-btn" data-pol="adaptive" type="button"
+                  title="Adaptiv: Grünzeiten folgen dem gemessenen Verkehr (Detektor-Proxy)"><i class="pdot" style="background:#2dd4bf"></i>Adaptiv</button>
+          <button class="mode-btn pol-btn" data-pol="coordinated" type="button"
+                  title="Koord. (grüne Welle): gemeinsamer Korridor-Takt + Versatz-Offsets, Restnetz adaptiv"><i class="pdot" style="background:#f5c451"></i>Koord.</button>
+          <button class="mode-btn pol-btn" data-pol="tuned" type="button"
+                  title="Tuned: fester Plan aus Detektor-Zählungen (OD-Schätzung) — animiert die Zähl-basierte Variante aus der KPI-Tabelle"><i class="pdot" style="background:#a78bfa"></i>Tuned</button>
+          <button class="mode-btn pol-btn all" data-pol="all" type="button" title="Alle animierbaren Strategien anzeigen">Alle</button>
+        </div>
+
         <div class="speeds" role="group" aria-label="Geschwindigkeit">
           <button class="speed-btn" data-speed="0.5" type="button">0.5×</button>
           <button class="speed-btn active" data-speed="1" type="button">1×</button>
           <button class="speed-btn" data-speed="2" type="button">2×</button>
           <button class="speed-btn" data-speed="4" type="button">4×</button>
         </div>
-      </div>
 
-      <div class="modes" role="group" aria-label="Controller-Ansicht">
-        <button class="mode-btn" data-mode="fixed" type="button">Fixed</button>
-        <button class="mode-btn" data-mode="adaptive" type="button">Adaptive</button>
-        <button class="mode-btn" data-mode="coordinated" type="button" title="Grüne Welle: gemeinsamer Zyklus + Versatz-Offsets — die dritte animierbare Strategie (Tuned liefert nur Kennzahlen, keine Animation)">Koord.</button>
-        <button class="mode-btn active" data-mode="both" type="button">Beide</button>
+        <button id="btn-osm" class="btn ghost icon" type="button" title="Echte OSM-Karte halbtransparent unter das Netz legen (© OpenStreetMap-Mitwirkende; braucht Internet — offline bleibt die Karte dunkel)">🗺️</button>
+        <input id="osm-opacity" type="range" min="10" max="100" step="5" value="70" title="Deckkraft der OSM-Karte" aria-label="Deckkraft der OSM-Karte" />
       </div>
 
       <div class="readouts">
-        <span class="pill" title="Summe aller Warteschlangen im Netz (wartende Fahrzeuge) — nicht die Zahl aller Fahrzeuge; im Modus „Beide“ wird Adaptive gezeigt"><span class="k">Netzlast</span> <b id="playhead-q" class="mono">–</b></span>
+        <span class="pill" title="Summe aller Warteschlangen im Netz über die sichtbaren Strategien (wartende Fahrzeuge, nicht die Zahl aller Fahrzeuge)"><span class="k">Σ Queue</span> <b id="playhead-q" class="mono">–</b></span>
         <span class="pill mono" title="Uhrzeit im simulierten Zeitfenster"><b id="playhead-clock">–</b></span>
       </div>
     </div>
 
-    <div class="canvas-wrap" id="canvas-wrap">
-      <div class="canvas-cell" id="cell-main">
-        <div class="canvas-title" id="cell-main-title">Adaptive</div>
-        <canvas id="canvas-main"></canvas>
-      </div>
-      <div class="canvas-cell" id="cell-alt">
-        <div class="canvas-title" id="cell-alt-title">Fixed</div>
-        <canvas id="canvas-alt"></canvas>
-      </div>
+    <div class="canvas-wrap" id="canvas-wrap" data-n="0">
+      <!-- Canvas-Zellen je sichtbarer Strategie erzeugt network.js -->
     </div>
 
     <div class="scrubber">
@@ -213,24 +237,66 @@
       <span><i class="sw" style="background:#22c55e"></i>freie Fahrt (0 veh)</span>
       <span><i class="sw" style="background:#eab308"></i>Stau im Aufbau</span>
       <span><i class="sw" style="background:#ef4444"></i>Stau (≥ 12 veh/Link)</span>
-      <span><i class="sw" style="background:#2dd4bf"></i>signalisierter Knoten</span>
+      <span><i class="sw" style="background:#2dd4bf"></i>signalisierter Knoten — anklicken für Kreuzungs-Ansicht</span>
       <span><i class="sw" style="background:#38475a"></i>Knoten</span>
-      <span><i class="sw" style="background:#64748b"></i>Fixed-Time</span>
-      <span><i class="sw" style="background:#2dd4bf"></i>Adaptiv</span>
     </div>
   </section>
 
   <!-- ========================= CHARTS ========================= -->
-  <section class="net-charts">
+  <section class="charts">
     <div class="panel chart-panel">
-      <h2>Vorher / Nachher</h2>
-      <p class="panel-sub">Verbesserung durch adaptive Steuerung (Δ % gegenüber Fixed-Time, positiv = besser)</p>
+      <h2>Kennzahlen im Vergleich</h2>
+      <p class="panel-sub">Jede Gruppe = eine Kennzahl, jeder Balken = eine Strategie. Balkenhöhen sind je Kennzahl eigen-skaliert — verglichen wird innerhalb der Gruppe; der kürzeste Balken bei „weniger ist besser“ ist der Sieger.</p>
       <canvas id="chart-bars"></canvas>
     </div>
     <div class="panel chart-panel">
-      <h2>Netzlast über die Zeit</h2>
-      <p class="panel-sub">Summe der Warteschlangen über der Uhrzeit (veh) · Fixed, Adaptiv, Koord.</p>
-      <canvas id="chart-load"></canvas>
+      <h2>Verlauf über die Zeit</h2>
+      <div class="chart-tools">
+        <div class="modes chart-metrics" role="group" aria-label="Kennzahl">
+          <button class="mode-btn met-btn active" data-met="delay" type="button" title="Verzögerung: Verlauf = wartende Fahrzeuge im Netz (Rate), kumuliert = Summe (veh·s)">Verzögerung</button>
+          <button class="mode-btn met-btn" data-met="throughput" type="button" title="Durchsatz: Verlauf = momentaner Fz/h, kumuliert = Ø bis Zeitpunkt t">Durchsatz</button>
+          <button class="mode-btn met-btn" data-met="maxq" type="button" title="Längste Warteschlange eines Links je Zeitpunkt bzw. Rekord bis t">max. Queue</button>
+          <button class="mode-btn met-btn" data-met="co2" type="button" title="CO₂-Proxy aus Leerlauf: Verlauf je Frame, kumuliert in Gramm">CO₂</button>
+          <button class="mode-btn met-btn" data-met="corr" type="button" title="Korridor-Stau: wartende Fahrzeuge auf dem Referenz-Korridor der grünen Welle — Verlauf je Frame, kumuliert in veh·s">Korridor-Stau</button>
+        </div>
+        <div class="modes chart-mode" role="group" aria-label="Modus">
+          <button class="mode-btn cmode-btn active" data-cmode="abs" type="button" title="Wert zum jeweiligen Zeitpunkt">Verlauf</button>
+          <button class="mode-btn cmode-btn" data-cmode="cum" type="button" title="Aufsummiert bis zum jeweiligen Zeitpunkt">Kumuliert</button>
+        </div>
+        <div class="zoom-row">
+          <span class="k">Zoom</span>
+          <input id="zoom-from" type="time" value="06:00" aria-label="von" />
+          <span class="time-sep">–</span>
+          <input id="zoom-to" type="time" value="22:00" aria-label="bis" />
+          <button id="zoom-reset" class="btn ghost" type="button" title="ganzes Zeitfenster">Reset</button>
+        </div>
+      </div>
+      <canvas id="chart-delay"></canvas>
+    </div>
+  </section>
+
+  <!-- ====================== DECISIONS ====================== -->
+  <section class="panel decisions">
+    <h2>Warum? – Entscheidungsprotokoll</h2>
+    <p class="panel-sub">Wie jede Strategie das Gebiet steuert — Live-Zahlen des Adaptiv-Netzes, Pläne der festen Verfahren</p>
+    <div class="modes dec-tabs" role="group" aria-label="Strategie-Protokoll">
+      <button class="mode-btn dec-tab active" data-dec="adaptive" type="button">Adaptiv</button>
+      <button class="mode-btn dec-tab" data-dec="fixed" type="button">Fixed</button>
+      <button class="mode-btn dec-tab" data-dec="coordinated" type="button">Koord.</button>
+      <button class="mode-btn dec-tab" data-dec="tuned" type="button">Tuned</button>
+    </div>
+    <div class="decisions-body">
+      <div id="dec-adaptive" class="dec-view">
+        <div class="dec-list-col">
+          <div id="hotspot-legend" class="decision-legend"></div>
+          <ul class="decision-list" id="hotspots-list"></ul>
+        </div>
+        <div class="pressure-box">
+          <h3>Netz in Zahlen</h3>
+          <div id="adaptive-stats" class="adaptive-stats"></div>
+        </div>
+      </div>
+      <div id="dec-plan" class="plan-box" hidden></div>
     </div>
   </section>
   </div><!-- /.dash-main -->
@@ -288,6 +354,7 @@
 </aside>
 
 <script src="ask.js"></script>
+<script src="report.js"></script>
 <script src="network.js"></script>
 </body>
 </html>

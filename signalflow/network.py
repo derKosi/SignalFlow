@@ -843,6 +843,7 @@ def _simulate(c: Compiled, demand: dict, controller, cfg: dict, frame_dt: int,
     corr_delay = 0.0
     corr_links = corr_links or []
     frames = []
+    last_served = 0.0
     green: dict[int, list[int]] = {}
     unsign = c.unsignalized
     # only links that currently carry vehicles are stepped (big speed-up on
@@ -949,12 +950,17 @@ def _simulate(c: Compiled, demand: dict, controller, cfg: dict, frame_dt: int,
                 corr_delay += sum(queue[l] for l in corr_links)
 
         if rec and (t % frame_dt == 0 or t == steps - 1):
+            # q carries the same link ids the payload's network.links use —
+            # compiled indices would silently off-by-one every client lookup.
             frames.append({
                 "t": t,
-                "q": [[l, round(queue[l], 2)] for l in active if queue[l] >= 0.5],
+                "q": [[c.net.links[l]["id"], round(queue[l], 2)]
+                      for l in active if queue[l] >= 0.5],
                 "ph": [[c.net.nodes[n]["id"], controller.phase[k]]
                        for k, n in enumerate(c.signalized)],
+                "s": round(served - last_served, 1),   # trips served in this interval
             })
+            last_served = served
 
     wall_hours = max(1e-9, steps / 3600.0)
     summary = {
@@ -1099,6 +1105,11 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
             "co2_pct": red(te["co2_g"], a["co2_g"]),
         }
 
+    # display copies of the corridors: link ids (like frames/network.links use)
+    # instead of compiled indices — the client maps queues back onto the map.
+    def cor_out(cor: dict) -> dict:
+        return {**cor, "links": [net.links[l]["id"] for l in cor.get("links", [])]}
+
     return {
         "region": region_id,
         "name": net.name,
@@ -1108,8 +1119,8 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
             "links": net.links,
             "signal_nodes": [net.nodes[n]["id"] for n in c.signalized],
         },
-        "corridor": demand["corridor"],
-        "corridors": demand["corridors"],
+        "corridor": cor_out(demand["corridor"]),
+        "corridors": [cor_out(x) for x in demand["corridors"]],
         "demand": {"n_entries": demand["n_entries"], "n_exits": demand["n_exits"],
                    "total_vph": total_vph},
         "scenario": {"name": scenario_name, "label": scen["label"],
@@ -1121,7 +1132,10 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
         "summary": {"fixed": f, "fixed_tuned": t_, "adaptive": a, "coordinated": k,
                     **({"fixed_tuned_est": tuned_est[0]} if tuned_est else {})},
         "improvement": improvement,
-        "frames": {"fixed": fixed[1], "adaptive": adaptive[1], "coordinated": coordinated[1]},
+        "frames": {"fixed": fixed[1], "adaptive": adaptive[1], "coordinated": coordinated[1],
+                   # the KPI row "Tuned" is the count-based estimate — animate that
+                   # same run (the oracle-tuned frames are deliberately not shown)
+                   **({"tuned": tuned_est[1]} if tuned_est is not None else {})},
         "config": {**base, "total_vph": total_vph, "frame_dt": frame_dt},
         "meta": {"steps": duration_min * 60, "frame_dt": frame_dt,
                  "clock": from_sec is not None,

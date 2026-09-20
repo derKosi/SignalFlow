@@ -9,10 +9,14 @@
 .topbar .nav{ display:flex; align-items:center; gap:10px; }
 .topbar .nav a.btn{ text-decoration:none; }
 
-/* ------------- KPIs (2×3) innerhalb der .dash-Spalte -------------------- */
+/* ------------- KPIs (1×6) innerhalb der .dash-Spalte -------------------- */
 /* Grid + sticky Chat-Spalte kommen aus styles.css (.dash/.dash-main/.dash-side);
-   hier nur der Netzwerk-Kniff: 6 Karten als 2×3 statt 5 in einer Reihe. */
-.dash.net .kpi-grid{ grid-template-columns:repeat(3, 1fr); }
+   hier nur der Netzwerk-Kniff: alle 6 Karten in einer Reihe wie die
+   5er-Reihe der Einzelkreuzung. */
+.dash.net .kpi-grid{ grid-template-columns:repeat(6, 1fr); }
+@media (max-width:1400px){
+  .dash.net .kpi-grid{ grid-template-columns:repeat(3, 1fr); }
+}
 @media (max-width:720px){
   .dash.net .kpi-grid{ grid-template-columns:repeat(2, 1fr); }
 }
@@ -45,31 +49,13 @@
 .add-row{ display:flex; gap:8px; align-items:center; }
 .add-row input{ flex:1 1 160px; min-width:120px; padding:6px 9px; border-radius:8px;
   border:1px solid #243244; background:#0d1626; color:var(--ink,#e2e8f0); font-size:13px; }
-.add-region .run-hint{ display:block; margin-top:6px; }
-.run-hint{ font-size:12.5px; color:#f5c451; margin-left:10px; align-self:center; }
-.btn.dirty{ box-shadow:0 0 0 2px rgba(245,196,81,.55); }
-.kpi .row.coordinated b{ color:#f5c451; }
-.kpi .row.coordinated .dlt{ color:#f5c451; }
-/* "Welle"-Badges: gestrichelter Rand als Marker — die Ampelfarbe
-   (grün/orange/rot) bleibt erhalten und ist konsistent zu allen anderen Deltas */
-.delta.coordinated{ border-style:dashed; border-color:rgba(245,196,81,.55); }
-.delta.coordinated.good{ color:var(--good); border-color:rgba(34,197,94,.4); }
-.delta.coordinated.mid{ color:var(--yellow); }
-.delta.coordinated.bad{ color:var(--bad); border-color:rgba(239,68,68,.4); }
-.kpi .row.tuned-est b{ color:#a78bfa; }
-.kpi .row.tuned-est .dlt{ color:#a78bfa; }
+.add-region .run-hint{ display:block; margin-top:6px; margin-left:0; }
+.run-hint{ font-size:12.5px; color:#f5c451; }
 .kpi .tag[title]{ cursor:help; }
-.region-row{
-  display:flex; flex-wrap:wrap; gap:16px 20px; align-items:flex-end;
-  margin-bottom:16px;
-}
-.region-control{ flex:1 1 320px; min-width:240px; }
 #region-filter{
-  grid-column:1 / -1; margin-top:2px; padding:6px 9px; border-radius:8px;
+  margin-top:2px; padding:6px 9px; border-radius:8px;
   border:1px solid #243244; background:#0d1626; color:var(--ink,#e2e8f0); font-size:12.5px;
 }
-
-.net-stats{ display:flex; flex-wrap:wrap; gap:8px; align-items:flex-end; flex:2 1 360px; }
 .stat{
   display:inline-flex; align-items:baseline; gap:7px;
   background:var(--panel-2); border:1px solid var(--line); border-radius:999px;
@@ -80,30 +66,61 @@
 .stat.accent b{ color:var(--accent); }
 
 /* ------------------------------ Steuerung ------------------------------ */
-.net-controls{
-  display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr));
-  gap:16px 18px; align-items:end;
+/* Einstellungen wie auf der Einzelkreuzung gruppiert (.ctl-group aus
+   styles.css); hier nur die Netzwerk-Besonderheiten. */
+.ctl-grid-region{ grid-template-columns:repeat(2, minmax(240px, 1fr)); }
+.dash.net .ctl-group .ctl-grid{ grid-template-columns:repeat(4, minmax(150px, 1fr)); }
+/* Zeitfenster: eine Spalte, kompakt — die Zeit-Elemente passen in eine Reihe */
+.dash.net .ctl-group .ctl-grid .control{ min-width:0; }
+.dash.net .ctl-group .ctl-grid .control select{ width:100%; max-width:100%; }
+.dash.net .time-row{ flex-wrap:nowrap; gap:4px; }
+.dash.net .time-row select{
+  padding:5px 4px; font-size:12px; min-width:0; flex:1 1 70px; width:auto;
 }
-/* Zeitfenster braucht Platz: 2 Spalten, eine Zeile, kein Umbrechen */
-.net-controls .control{ min-width:0; }
-.net-controls .control select{ width:100%; max-width:100%; }
-.net-controls .control.time-control{ grid-column: span 2; }
-.net-controls .time-row{ flex-wrap:nowrap; }
-.run-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:16px; }
-.run-hint{ color:var(--faint); font-size:12px; }
+.dash.net .time-row input[type=time]{
+  padding:5px 2px; font-size:12px; flex:1 1 84px; min-width:84px; width:auto;
+}
 #btn-run.busy .btn-label::after{ content:" …"; }
+#btn-run.sim-run.dirty{ box-shadow:0 0 0 2px rgba(245,196,81,.55), 0 4px 18px rgba(245,196,81,.25); }
+/* Status-Zeile unter der Gebiets-Gruppe */
+.net-stats{ display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+
 
 /* --------------------------- Karten-Canvas ----------------------------- */
 .viewer .canvas-cell{ aspect-ratio:16 / 11; }
 .canvas-cell canvas{ image-rendering:auto; }
 
+/* -------------------- Entscheidungsprotokoll: Hotspots ----------------- */
+/* Viewer-Zeile: alles in einer Reihe — der Deckkraft-Slider darf eng werden,
+   statt umzubrechen; die Readouts rechts bleiben stehen */
+.transport #osm-opacity{ width:74px; flex:0 1 74px; min-width:56px; }
+.transport .speeds{ margin-left:0; }
+.transport #btn-osm{ padding:8px 10px; min-width:40px; }
+#osm-opacity:disabled{ opacity:.35; }
+/* enges Fenster (~1400–1560 px, Chat-Spalte noch rechts): etwas Luft schaffen */
+@media (max-width:1560px) and (min-width:1401px){
+  .viewer .policy-modes .mode-btn{ padding:8px 10px; font-size:12px; }
+  .transport #osm-opacity{ width:56px; flex-basis:56px; }
+  .readouts .pill{ padding:5px 9px; }
+}
+/* Notfall: statt abzuschneiden umzubrechen */
+.viewer-bar{ flex-wrap:wrap; row-gap:8px; }
+.decision-legend .lg.lead{ font-weight:600; color:var(--txt); }
+/* Top-Stau-Liste: Druck-Balken (wie die Drucktabelle, aber in Listenzeilen) */
+.decision-item .bar{
+  display:inline-block; height:8px; border-radius:4px; vertical-align:middle;
+  background:linear-gradient(90deg, rgba(45,212,191,.45), var(--accent));
+}
+.decision-item .why .avg{ margin-left:8px; }
+.decision-item .cat.cat-hot{
+  color:var(--accent-2); border-color:rgba(56,189,248,.4);
+}
+
 /* ------------------------------ Charts --------------------------------- */
-.net-charts{ display:grid; grid-template-columns:1fr 1fr; gap:16px; }
-@media (max-width:1000px){ .net-charts{ grid-template-columns:1fr; } }
+@media (max-width:1000px){ .charts{ grid-template-columns:1fr; } }
 
 /* ------------------------------- Footer -------------------------------- */
 .foot .foot-note{ display:block; margin-top:4px; color:var(--faint); }
 @media (max-width:720px){
-  .region-row{ flex-direction:column; align-items:stretch; }
   .net-stats{ justify-content:flex-start; }
 }
