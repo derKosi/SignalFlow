@@ -450,3 +450,48 @@ Shipped (all Playwright-verified, 108 tests green):
   as the method name where they explain it.
 * Disk cache: cleared after engine semantics changed (old payloads would have
   served stale results for identical config keys).
+
+## 16. Session 2026-09-20 (Nachmittag) — Feinschliff der Dashboards
+
+* **Manual-Run**: Parameteränderungen starten nicht mehr automatisch — dirty
+  hint + leuchtender Simulieren-Button (Initial-Load läuft einmal). Netzwerk:
+  auch Regionswechsel wartet auf den Button.
+* **Viewer-Zeile ohne Umbruch**: „Geradeaus"→„Gerade", Uhrzeit-Pill ohne Label
+  als dritte (rechte) Pille, das redundante t-Pill entfernt. Ein Zustand
+  (`state.visible`) steuert Canvases **und** beide Auswertungs-Charts
+  (Filter-Chips auf den Karten waren gebaut, aber auf Feedback wieder
+  zugunsten der Canvas-Legenden revertet).
+* **Zeitreihe**: 5 KPIs × Verlauf/Kumuliert (momentan vs. aufsummiert),
+  Flächen-Darstellung, von–bis-Zoom auf Uhrzeit, Serien-Cache pro Payload.
+* **Δ-Semantik repariert**: klassische Prozentänderung (neu−alt)/alt — grün/
+  rot bewertet, Vorzeichen ist reine Wertänderung; „±0,0 %" exakt rundungsgleich.
+* **„Warum?"-Karte**: Plan-Karten volle Kartenbreite; `.decisions-body` ist
+  kein Grid mehr (Adaptiv-View nutzt die volle Breite — vorher: tote rechte
+  Spur). Umschalt-Kategorien in Richtersprache mit Tooltips („Früh beendet",
+  „Konkurrierender Druck", „Max-Grün erreicht", „Bus-Priorität (TSP)"), Legende
+  mit Zählungen, Statistik unten rechts (Min-/Max-Grün, Gelb+Räumrot).
+* **PDF-Abhandlung** (`web/report.js`, abhängigkeitsfrei): A4-Bericht mit
+  Randbedingungen aus den Controls, KPI-Matrix der sichtbaren Strategien,
+  Charts + beschriftetes 2×2-Strategien-Composite als JPEG-XObjects; xref
+  byte-exakt (validiert). Button „⤓ Bericht".
+* **RiLSA**: MIN_GREEN_S = 10 s und MAX_CYCLE_S = 120 s für alle berechneten
+  Pläne; Fixed-Baseline auf [36,10,32,12]; Fußgängerphasen bewusst nicht
+  modelliert (offen benannt in Writeup + Plan-Karte).
+* **Farben**: Tuned = pastell-Violett #a78bfa (war zu nah am Adaptiv-Teal);
+  lokale Analyse-Pill im Chat bleibt grün.
+* **Ask-Panel**: Vorschlags-Chips je Modus (Ferien-Lkw überall); offline
+  unterscheidbare Stimmen — solo mit Empfehlung, panel mit echtem Zahlen-Audit
+  + Vertrauensurteil, explain als Lauf-Erzählung. Konversationsgedächtnis
+  bewusst NICHT gebaut (P2, siehe todo).
+* **Kreisverkehr** in der UI ausgeblendet (hidden-Option; Engine + Tests
+  bleiben) — Vision: Yield vs. Signal auf Netzwerkebene.
+* **Topbar**: innerer Row auf Seitenbreite zentriert (SignalFlow über
+  Simulieren), Links ohne Unterstreichung, „Ergebnis vorlesen"/„Auto-Vorlesen"
+  aus den Headern entfernt.
+* **ElevenLabs**: Key liegt in `.env` als `VOICEOVER_ELEVENLABS_API_KEY` —
+  bewusst NICHT an die App gebunden (App liest nur ELEVENLABS_API_KEY und
+  bleibt TTS-offline). Free-Quota ist fürs Video-Voiceover reserviert;
+  funktionierend verifiziert: Modelle eleven_flash_v2_5 / eleven_turbo_v2_5,
+  premade-Stimmen (z. B. George JBFqnCBsd6RMkjVDRZzb), deutsche Sätze mit
+  Umlauten sauber. multilingual_v2 + Legacy-Voice „Rachel" → 402.
+* Tests 116/116 grün; Disk-Cache nach jeder Engine-Änderung geleert.

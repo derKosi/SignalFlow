@@ -57,6 +57,18 @@ with zero runtime dependencies).
   phase colours, synced to playback). Possible upgrades: per-node KPIs and
   turn-level movements in the drilldown.
 * MAXBAND-style green-wave optimisation instead of fixed travel-time offsets.
+* **Metrik-Reflexion „Leerlauf-Grün“** (Notiz, kein Umbau): Wasted Green ist
+  ein scharfer *Plan-Qualitäts*-Indikator (adaptiv gewinnt hier riesig, weil
+  leere Phasen früh enden) — aber kein gesellschaftliches Ziel an sich.
+  Drei Denkanstöße für später: (1) Nachts ist etwas Leerlauf-Grün durch
+  Mindestgrün unvermeidbar und auch ok (Erreichbarkeit). (2) Für
+  *vorausschauendes Fahren* sind eigentlich **Stops je Fahrzeug** und
+  **Anteil der Ankünfte auf Grün** (Progressionsqualität) die besseren
+  proxies — Grüne Welle lässt Pulkas auf Grün treffen, weniger Bremsen/
+  Anfahren. (3) Im Writeup sollte Leerlauf-Grün als „Effizienz des Plans
+  gegenüber der Nachfrage“ formuliert werden, nicht als direkter
+  gesellschaftlicher Nutzen; TSP/Countdown-Uhr (letzte Fahrzeugin die
+  Restgrün) als Anschluss-Thema.
 * **Roundabout als Vollwert-Strategie** (Vision): geometry-based capacity +
   gap acceptance (Kimber, Song et al.) und der Vergleich Signal vs. Yield auf
   der *Netzwerk*-Ebene. Die Junction-Engine hält den Kreisverkehr bereits
