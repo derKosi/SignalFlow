@@ -79,23 +79,23 @@ def _http_json(url: str, payload: dict, headers: dict, timeout: int = 45) -> dic
 
 
 SYSTEM_PROMPT = (
-    "You are SignalFlow, an explainable adaptive traffic-signal controller for a "
-    "Munich intersection. Answer the operator's question strictly using the "
-    "provided simulation context (metrics and recent phase-switch decisions). "
-    "Be concise (max ~140 words), cite concrete numbers, and explain the *why* "
-    "behind decisions. Never invent data that is not in the context."
-    "Answer in the same language as the operator's question (German question means German answer). "
+    "You are SignalFlow's explain mode: the narrator of the run currently on the "
+    "operator's screen (a Munich junction). You have no tools — never offer to run "
+    "a simulation; interpret the provided context (per-strategy metrics and recent "
+    "phase-switch decisions) only. Give a short reading of this run: what the "
+    "controller did and why. Max ~120 words, cite concrete numbers from the "
+    "context, never invent data. Answer in the same language as the operator's "
+    "question (German question means German answer). "
 )
 
 SYSTEM_PROMPT_NETWORK = (
-    "You are SignalFlow, an explainable adaptive traffic-signal controller "
-    "operating on urban road networks (district level, real OpenStreetMap "
-    "graphs). Answer the operator's question strictly using the provided "
-    "network simulation context (per-policy metrics for the whole district). "
-    "Be concise (max ~140 words), cite concrete numbers, and explain the *why* "
-    "behind differences between policies. Never invent data that is not in "
-    "the context. Answer in the same language as the operator's question "
-    "(German question means German answer). "
+    "You are SignalFlow's explain mode for district runs (real OpenStreetMap "
+    "networks). You have no tools — never offer to run a simulation; interpret "
+    "the provided network context (per-policy metrics for the whole district) "
+    "only. Give a short reading of this run: why the policies differ district-wide. "
+    "Max ~120 words, cite concrete numbers from the context, never invent data. "
+    "Answer in the same language as the operator's question (German question "
+    "means German answer). "
 )
 
 
@@ -233,47 +233,63 @@ def featherless_probe(timeout: int = 30) -> dict:
 
 
 def fallback_explain(payload: dict, question: str) -> str:
-    """Deterministic, dependency-free explainer used when Featherless is absent."""
+    """Deterministic, dependency-free explainer used when Featherless is absent.
+
+    Voice: a narrator of the run on screen (decision log first), deliberately
+    unlike the agent's tool-report tone — no tool talk, no KPI table.
+    """
     if is_network_payload(payload):
         return _fallback_explain_network(payload, question)
     s = payload.get("summary", {})
     f, a = s.get("fixed", {}), s.get("adaptive", {})
     imp = payload.get("improvement", {})
     dec = (payload.get("adaptive", {}) or {}).get("decisions", [])
-    d0 = dec[len(dec) // 2] if dec else None
 
     parts = [
-        f"Q: {question}".strip(),
+        f"Frage: {question}".strip(),
         "",
-        f"SignalFlow adapts phase timing to live queue pressure. Against the fixed-time "
-        f"plan over the same traffic, it cut average delay from {f.get('avg_delay_s')}s to "
-        f"{a.get('avg_delay_s')}s ({imp.get('avg_delay_pct')}%), raised throughput to "
-        f"{a.get('throughput_vph')} veh/h ({imp.get('throughput_pct')}% vs baseline), and "
-        f"reduced wasted green from {f.get('wasted_green_s')}s to {a.get('wasted_green_s')}s "
-        f"by terminating phases whose queue is already cleared.",
+        f"Aus dem Verlauf dieses Laufs: über denselben Verkehr kommt die adaptive "
+        f"Steuerung auf {a.get('avg_delay_s')} s mittlere Verzögerung, der feste "
+        f"Fahrplan auf {f.get('avg_delay_s')} s ({imp.get('avg_delay_pct')} % besser).",
     ]
-    if d0:
+    if dec:
         parts.append(
-            f"Example decision (t={d0.get('t')}s): {d0.get('reason')}. "
-            f"The choice only fires when a competing phase's pressure exceeds the current "
-            f"phase by the hysteresis margin, which prevents green-time churn."
+            f"Der Regler hat dabei {len(dec)}× die Phase gewechselt — und zwar erst, "
+            f"wenn der Druck einer Folgephase den der laufenden um die Hysterese-"
+            f"Schwelle übersteigt; so bleibt die Grünzeit ruhig statt zu flackern."
+        )
+        shown: list[dict] = []
+        for d in (dec[0], dec[-1]):
+            if isinstance(d, dict) and d not in shown:
+                shown.append(d)
+        for d in shown[:2]:
+            why = str(d.get("reason") or "")
+            head = f"switch {d.get('from')}->{d.get('to')}"
+            if why.startswith(head):     # the log line already names the phases
+                why = why[len(head):].lstrip(" :")
+            parts.append(f"Beispiel: um t={d.get('t')}s {d.get('from')} → "
+                         f"{d.get('to')} — {why}.")
+    else:
+        parts.append(
+            "Gewechselt wird nur, wenn der Druck der Folgephase den der laufenden um "
+            "die Hysterese-Schwelle übersteigt — kleine Queues lösen keinen Wechsel aus."
         )
     co, tu = s.get("coordinated"), s.get("tuned")
     if isinstance(co, dict) and co.get("avg_delay_s") is not None:
         parts.append(
-            f"The coordinated green wave lands at {co.get('avg_delay_s')}s: bound to its "
-            f"corridor master cycle it cannot always pick the locally best split — its "
-            f"benefit appears on corridors (district view), not at a single junction."
+            f"Die koordinierte grüne Welle liegt bei {co.get('avg_delay_s')} s: an den "
+            f"Korridor-Zyklus gebunden, kann sie nicht immer die lokal beste Aufteilung "
+            f"wählen — ihr Gewinn erscheint erst im Gebiet, nicht am Einzelknoten."
         )
     if isinstance(tu, dict) and tu.get("avg_delay_s") is not None:
         parts.append(
-            f"Tuned* reaches {tu.get('avg_delay_s')}s using only stop-line counts "
-            f"(Webster plans per time of day) — most of the adaptive gain without "
-            f"live control."
+            f"Tuned* erreicht {tu.get('avg_delay_s')} s nur mit Zählstellen-Plänen "
+            f"(Webster je Tageszeit) — der größte Teil des Adaptiv-Vorteils ohne "
+            f"live Steuerung."
         )
     parts.append(
-        f"Net effect: about {imp.get('co2_pct')}% less idling-related CO2 proxy. "
-        f"(Offline explainer — set FEATHERLESS_API_KEY for free-form answers.)"
+        f"In Summe: rund {imp.get('co2_pct')} % weniger Leerlauf-CO₂-Proxy. "
+        f"(Offline-Explainer — setze FEATHERLESS_API_KEY für freie Antworten.)"
     )
     return "\n".join(parts)
 
@@ -283,24 +299,26 @@ def _fallback_explain_network(payload: dict, question: str) -> str:
     s = payload.get("summary", {})
     f, a = s.get("fixed", {}), s.get("adaptive", {})
     imp = payload.get("improvement", {})
+    scen = payload.get("scenario") or {}
     parts = [
-        f"Q: {question}".strip(),
+        f"Frage: {question}".strip(),
         "",
-        f"District '{payload.get('name')}' (region {payload.get('region')}): adaptive "
-        f"signals cut the network-wide average delay from {f.get('avg_delay_s')}s to "
-        f"{a.get('avg_delay_s')}s ({imp.get('avg_delay_pct')}%), shorten average travel "
-        f"time by {imp.get('avg_travel_pct')}% and lower the CO2 proxy by "
-        f"{imp.get('co2_pct')}% versus the fixed-time plans.",
+        f"Aus dem Verlauf von „{payload.get('name')}“ (Region {payload.get('region')}"
+        + (f", Szenario {scen.get('label')}" if scen.get("label") else "") + f"): "
+        f"adaptive Signale drücken den gebietsweiten Schnitt von {f.get('avg_delay_s')} s "
+        f"auf {a.get('avg_delay_s')} s Verzögerung ({imp.get('avg_delay_pct')} %), "
+        f"verkürzen die Reisezeit um {imp.get('avg_travel_pct')} % und den "
+        f"CO₂-Proxy um {imp.get('co2_pct')} % gegenüber den festen Plänen.",
     ]
     co = s.get("coordinated")
     if isinstance(co, dict) and co.get("avg_delay_s") is not None:
         parts.append(
-            f"The coordinated policy (green wave) reaches {co.get('avg_delay_s')}s average "
-            f"delay — strong on the main corridor, but it follows a fixed offset plan, "
-            f"while the adaptive controller reacts to live queues at every junction."
+            f"Die koordinierte grüne Welle erreicht {co.get('avg_delay_s')} s — stark auf "
+            f"dem Hauptkorridor, aber an feste Versatz-Pläne gebunden, während die "
+            f"adaptive Regelung an jeder Kreuzung auf die live Schlangen reagiert."
         )
     parts.append(
-        "(Offline explainer — set FEATHERLESS_API_KEY for free-form answers.)"
+        "(Offline-Explainer — setze FEATHERLESS_API_KEY für freie Antworten.)"
     )
     return "\n".join(parts)
 

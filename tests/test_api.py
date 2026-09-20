@@ -270,7 +270,7 @@ class ApiLiveTests(unittest.TestCase):
         d = json.loads(body)
         self.assertEqual(d["source"], "fallback")
         self.assertIn("Neu-Riem", d["answer"])
-        self.assertIn("green wave", d["answer"])       # coordinated branch
+        self.assertIn("grüne Welle", d["answer"])      # coordinated branch
         self.assertNotIn("wasted green", d["answer"])  # junction template leak
 
     def test_post_agent_with_network_context(self):

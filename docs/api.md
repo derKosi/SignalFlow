@@ -167,6 +167,12 @@ number no tool digest backs — in the draft and in the writer output alike; an
 unrepairable draft is replaced by a fully verified deterministic answer. The response
 then also carries `pipeline`, `revisions`, `checks[]` and the verified `draft`.
 
+Without a key the deterministic path answers in the mode's own voice: `solo` as an
+agent report ("Ich habe … simuliert (Tool: …)") ending with a next step, `panel` as
+marked Analyse/Kritik/Antwort sections whose critic audits every number against the
+tool digest and closes with a `Prüfung:` line — so the modes stay distinguishable in
+the offline demo.
+
 Without a key, after protocol failures, or when the tool budget is exhausted, a
 deterministic keyword path runs one real simulation and answers from it — the endpoint
 always returns an `answer` plus a `steps` trace. Identical questions are served from a

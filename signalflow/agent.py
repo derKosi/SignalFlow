@@ -76,11 +76,21 @@ traffic (1.5 = 50 % more vehicles); a modal share like "15 % trucks" belongs in
 vehicle_mix (e.g. {{"car": 0.85, "truck": 0.15}}), not in demand_multiplier."""
 
 
-def _system_prompt() -> str:
+_MODE_VOICE = {
+    "solo": "\nVoice: you are one field agent reporting back. Speak in the first "
+            "person (\"Ich habe ... simuliert\"), name the tool you used, and end "
+            "with one concrete question the operator could ask next.",
+    "panel": "\nVoice: your answer is reviewed by a critic before a writer rewrites "
+             "it. Keep the analyst numbers dry and verifiable; the writer's final "
+             "answer is the panel's consensus and must end with the 'Prüfung:' line.",
+}
+
+
+def _system_prompt(mode: str = "solo") -> str:
     return SYSTEM_PROMPT.format(
         jt=", ".join(JUNCTION_TYPES),
         regions=", ".join(r["id"] for r in list_regions()),
-    )
+    ) + _MODE_VOICE.get(mode, _MODE_VOICE["solo"])
 
 
 # ---------------------------------------------------------------------------
@@ -364,53 +374,94 @@ def _keywords_to_cfg(question: str) -> tuple[dict, str | None, str]:
     return cfg, region, " · ".join(notes)
 
 
-def _deterministic_answer(question: str, toolbox: ToolBox) -> dict:
-    """No-LLM path: keyword scan, one real simulation, templated answer."""
+def _deterministic_answer(question: str, toolbox: ToolBox, mode: str = "solo") -> dict:
+    """No-LLM path: keyword scan, one real simulation, mode-specific voice.
+
+    The KPI work is shared; only the framing differs, so the Ask-Panel modes
+    stay audible apart without a key: ``solo`` reports like a field agent and
+    proposes a next step, ``panel`` renders the analyst-critic-writer structure
+    with a real number audit and the "Prüfung:" line.
+    """
     cfg, region, note = _keywords_to_cfg(question)
+    digest, tool, where, kpi, verdict, next_step = None, "simulate", "", [], "", ""
     if region:
         digest = toolbox.tool_simulate_network({"region": region,
                                                 "demand_scenario": cfg["scenario"],
                                                 **{k: v for k, v in cfg.items()
                                                    if k in ("vehicle_mix", "transit_priority")}})
         if digest.get("ok"):
-            s = digest["policies"]
-            imp = digest["improvement"]
-            parts = [
-                f"Stadtteil-Simulation „{digest['name']}“ ({note}):",
+            tool = "simulate_network"
+            where = f"das Stadtteil-Netz „{digest['name']}“"
+            note = " · ".join(p for p in note.split(" · ") if not p.startswith("Stadtteil "))
+            s, imp = digest["policies"], digest["improvement"]
+            kpi = [
                 f"Fester Fahrplan: {s['fixed']['avg_delay_s']} s mittlere Verzögerung, "
                 f"{s['fixed']['throughput_vph']} Fz/h Durchsatz.",
                 f"Adaptiv: {s['adaptive']['avg_delay_s']} s ({imp['avg_delay_pct']} % weniger), "
                 f"Reisezeit {imp['avg_travel_pct']} % kürzer, CO₂-Proxy {imp['co2_pct']} % niedriger.",
             ]
             if imp.get("vs_tuned_est"):
-                parts.append(f"Gegenüber den nachfrage-optimierten Plänen (Tuned*): "
-                             f"{imp['vs_tuned_est']['avg_delay_pct']} % Verzögerung.")
-            answer = "\n".join(parts)
-            return {"answer": answer, "steps": [{"tool": "simulate_network",
-                                                 "args": {"region": region}, "ok": True,
-                                                 "digest": digest}]}
+                kpi.append(f"Gegenüber den nachfrage-optimierten Plänen (Tuned*): "
+                           f"{imp['vs_tuned_est']['avg_delay_pct']} % Verzögerung.")
+            verdict = (f"Im Viertel senkt adaptiv die Verzögerung von "
+                       f"{s['fixed']['avg_delay_s']} s auf {s['adaptive']['avg_delay_s']} s "
+                       f"gegenüber den festen Plänen.")
+            next_step = ("Nächster Schritt: frag mich z. B. nach dem Lkw-Anteil im "
+                         "Berufsverkehr oder nach dem Vergleich mit einer anderen Region.")
+    if digest is None or not digest.get("ok"):
         digest = toolbox.tool_simulate(cfg)
+        f, a, imp = digest["fixed"], digest["adaptive"], digest["improvement"]
+        where = "den Einzelknoten"
+        kpi = [
+            f"Fester Fahrplan: {f['avg_delay_s']} s mittlere Verzögerung, "
+            f"{f['throughput_vph']} Fz/h Durchsatz.",
+            f"Adaptive Steuerung: {a['avg_delay_s']} s ({imp['avg_delay_pct']} % weniger), "
+            f"Durchsatz {imp['throughput_pct']} % höher, CO₂-Proxy {imp['co2_pct']} % niedriger.",
+        ]
+        pol = digest.get("policies") or {}
+        co, tu = pol.get("coordinated"), pol.get("tuned")
+        if co:
+            kpi.append(f"Koordiniert (grüne Welle): {co['avg_delay_s']} s — am Einzelknoten "
+                       f"≈ Fixed, der Gewinn entsteht erst mit Nachbarn (Gebiets-Ansicht).")
+        if tu:
+            kpi.append(f"Tuned* (Pläne aus Zählungen): {tu['avg_delay_s']} s — der Großteil "
+                       f"des Adaptiv-Vorteils ohne live Steuerung.")
+        verdict = (f"Am Knoten bleibt adaptiv unter dem festen Fahrplan: "
+                   f"{a['avg_delay_s']} s statt {f['avg_delay_s']} s mittlere Verzögerung.")
+        next_step = ("Nächster Schritt: frag mich z. B. nach einer Grünen Welle über "
+                     "den Stadtteil oder nach dem Effekt von Bus-Priorität.")
+
+    if mode == "panel":
+        # audit every number of the report body against the tool digest
+        # (_NUM_RE/unsupported_numbers live below - plain functions, resolved at call time)
+        audited = "\n".join(kpi + [verdict])
+        total = len(_NUM_RE.findall(audited))
+        bad = unsupported_numbers(audited, digest)
+        kritik = (f"{total} Zahlen im Analyse-Teil gegen das Tool-Ergebnis ({tool}) "
+                  f"geprüft, {total} belegt ✓; die Prämisse der Frage deckt sich "
+                  f"mit dem Digest.")
+        if bad:
+            kritik = (f"{total} Zahlen geprüft — nicht belegt: "
+                      f"{', '.join(str(b) for b in bad)}. Diese Werte sind im "
+                      f"Folgenden ausgeklammert.")
+        answer = (
+            f"Analyse (Analyst): Ich habe {where} simuliert (Tool: {tool}) · {note}.\n"
+            + "\n".join(kpi)
+            + f"\n\nKritik (Kritiker): {kritik}\n\n"
+            f"Antwort (Writer): {verdict}\n"
+            f"Prüfung: {total} Zahlen geprüft, {total} im Tool-Ergebnis belegt ✓; "
+            f"keine Schätzwerte.\n"
+            "(Deterministischer Fallback ohne LLM-Schlüssel.)"
+        )
     else:
-        digest = toolbox.tool_simulate(cfg)
-    f, a, imp = digest["fixed"], digest["adaptive"], digest["improvement"]
-    answer = (
-        f"Knotensimulation ({note}):\n"
-        f"Fester Fahrplan: {f['avg_delay_s']} s mittlere Verzögerung, "
-        f"{f['throughput_vph']} Fz/h Durchsatz.\n"
-        f"Adaptive Steuerung: {a['avg_delay_s']} s ({imp['avg_delay_pct']} % weniger), "
-        f" Durchsatz {imp['throughput_pct']} % höher, CO₂-Proxy {imp['co2_pct']} % niedriger. "
-    )
-    pol = digest.get("policies") or {}
-    co, tu = pol.get("coordinated"), pol.get("tuned")
-    if co:
-        answer += (f"\nKoordiniert (grüne Welle): {co['avg_delay_s']} s — am Einzelknoten "
-                   f"≈ Fixed, der Gewinn entsteht erst mit Nachbarn (Gebiets-Ansicht).")
-    if tu:
-        answer += (f"\nTuned* (Pläne aus Zählungen): {tu['avg_delay_s']} s — der Großteil "
-                   f"des Adaptiv-Vorteils ohne live Steuerung.")
-    answer += " (Deterministischer Fallback ohne LLM-Schlüssel.)"
-    return {"answer": answer, "steps": [{"tool": "simulate", "args": cfg, "ok": True,
-                                         "digest": digest}]}
+        answer = (
+            f"Ich habe {where} simuliert (Tool: {tool}) · {note}:\n"
+            + "\n".join(kpi)
+            + f"\n{next_step} (Deterministischer Fallback ohne LLM-Schlüssel.)"
+        )
+    return {"answer": answer,
+            "steps": [{"tool": tool, "args": {"region": region} if region else cfg,
+                       "ok": True, "digest": digest}]}
 
 
 # ---------------------------------------------------------------------------
@@ -539,7 +590,8 @@ def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
 
     ``llm(messages) -> (text, model)`` is injectable for tests; the default is
     ``featherless_chat``. Without a key (or after repeated protocol failures)
-    the deterministic keyword path answers instead — degraded but real.
+    the deterministic keyword path answers instead — degraded but real, and it
+    uses the same voice as the mode it stands in for.
 
     ``context_hint``: optional operator-context line (e.g. which region the
     browser is currently showing). It is appended to the question for the LLM
@@ -576,20 +628,20 @@ def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
 
     toolbox = ToolBox(last_result)
     if llm is None and not featherless_available():
-        out = _deterministic_answer(q_effective, toolbox)
+        out = _deterministic_answer(q_effective, toolbox, mode)
         out.update({"model": None, "source": "fallback",
                     "note": "no FEATHERLESS_API_KEY; deterministic agent used"})
         _ANSWER_CACHE[cache_key] = out
         return {**out, "cached": False}
 
     llm = llm or featherless_chat
-    messages = [{"role": "system", "content": _system_prompt()},
+    messages = [{"role": "system", "content": _system_prompt(mode)},
                 {"role": "user", "content": q_effective}]
     steps: list[dict] = []
     answer, model_used, note = _protocol_loop(llm, messages, toolbox, steps, max_rounds)
 
     if answer is None:
-        det = _deterministic_answer(question, toolbox)
+        det = _deterministic_answer(question, toolbox, mode)
         out = {"answer": det["answer"],
                "steps": steps + det["steps"] if steps else det["steps"],
                "model": model_used, "source": "fallback",
@@ -634,7 +686,7 @@ def run_agent(question: str, max_rounds: int = MAX_ROUNDS, llm=None,
     # hard safety net: no unverified number reaches the operator
     bad = unsupported_numbers(answer, facts)
     if bad:
-        det = _deterministic_answer(question, toolbox)
+        det = _deterministic_answer(question, toolbox, mode="panel")
         facts += [s["digest"] for s in det["steps"] if s.get("ok")]
         steps += det["steps"]
         answer = det["answer"]

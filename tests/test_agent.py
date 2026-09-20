@@ -22,6 +22,7 @@ sys.path.insert(0, str(ROOT))
 from signalflow.agent import (  # noqa: E402
     ToolBox, extract_json, run_agent, unsupported_numbers,
 )
+from signalflow.integrations import fallback_explain  # noqa: E402
 from signalflow.simulation import run_scenario  # noqa: E402
 
 
@@ -385,6 +386,114 @@ class PanelPipelineTest(unittest.TestCase):
     def test_mode_validation(self):
         with self.assertRaises(ValueError):
             run_agent("Frage", llm=_fake_llm([]), mode="chaos", use_cache=False)
+
+
+class DeterministicVoicesTest(unittest.TestCase):
+    """Offline (no key) the Ask-Panel modes must still be audible apart.
+
+    ``solo`` reports like a field agent ("Ich habe ... simuliert") and proposes a
+    next step; ``panel`` renders analyst -> critic -> writer with a real number
+    audit and the "Prüfung:" line.
+    """
+
+    QUESTION = "Was bringt die adaptive Steuerung bei 15 % Lkw?"
+    FOOTNOTE = "(Deterministischer Fallback ohne LLM-Schlüssel.)"
+
+    def setUp(self):
+        _clear_caches()
+        unittest.mock.patch("signalflow.agent.featherless_available",
+                            return_value=False).start()
+        self.addCleanup(unittest.mock.patch.stopall)
+
+    def test_solo_and_panel_differ_on_same_question(self):
+        solo = run_agent(self.QUESTION, llm=None, use_cache=False, mode="solo")["answer"]
+        panel = run_agent(self.QUESTION, llm=None, use_cache=False, mode="panel")["answer"]
+        for marker in ("Analyse (Analyst):", "Kritik (Kritiker):",
+                       "Antwort (Writer):", "Prüfung:"):
+            self.assertIn(marker, panel)
+            self.assertNotIn(marker, solo)
+        self.assertIn("Ich habe", solo)
+        self.assertIn("Nächster Schritt:", solo)
+        self.assertNotIn("Nächster Schritt:", panel)
+        self.assertNotEqual(solo, panel)
+
+    def test_panel_critic_audits_numbers_against_the_tool_digest(self):
+        panel = run_agent(self.QUESTION, llm=None, use_cache=False, mode="panel")["answer"]
+        self.assertRegex(panel, r"Kritik \(Kritiker\): \d+ Zahlen[^.]*belegt ✓")
+        self.assertRegex(panel, r"Prüfung: \d+ Zahlen geprüft, \d+ im Tool-Ergebnis belegt")
+        # the deterministic template only emits digest numbers: nothing untraceable
+        self.assertNotIn("nicht belegt", panel)
+
+    def test_footnote_attached_to_both_deterministic_voices(self):
+        for mode in ("solo", "panel"):
+            answer = run_agent(self.QUESTION, llm=None, use_cache=False,
+                               mode=mode)["answer"]
+            self.assertIn(self.FOOTNOTE, answer)
+
+    def test_solo_voice_survives_protocol_failure(self):
+        """A mid-session LLM breakdown lands in the same mode-aware fallback."""
+        llm = _fake_llm(["no protocol", "still no protocol"])
+        out = run_agent(self.QUESTION, llm=llm, use_cache=False, mode="panel")
+        self.assertEqual(out["source"], "fallback")
+        self.assertIn("Kritik (Kritiker):", out["answer"])
+
+
+class ExplainFallbackVoiceTest(unittest.TestCase):
+    """The third panel mode: /api/explain's fallback narrates the run on screen
+    from its decision log — no tool talk, no critic structure, no "Prüfung:"."""
+
+    RUN = {
+        "scenario": {"name": "berufsverkehr", "label": "Berufsverkehr"},
+        "summary": {"fixed": {"avg_delay_s": 53.9, "throughput_vph": 4410,
+                              "wasted_green_s": 90.0},
+                    "adaptive": {"avg_delay_s": 40.7, "throughput_vph": 4700,
+                                 "wasted_green_s": 41.0},
+                    "coordinated": {"avg_delay_s": 53.2},
+                    "tuned": {"avg_delay_s": 43.1}},
+        "improvement": {"avg_delay_pct": 24.5, "throughput_pct": 6.6, "co2_pct": 18.0},
+        "adaptive": {"decisions": [
+            {"t": 62, "from": "N-S", "to": "O-W",
+             "reason": "switch N-S->O-W (higher competing pressure)"},
+            {"t": 145, "from": "O-W", "to": "N-S",
+             "reason": "switch O-W->N-S (max green reached)"},
+        ]},
+    }
+
+    def test_junction_narrates_decisions_without_agent_markers(self):
+        answer = fallback_explain(self.RUN, "Warum wechselt die Phase so oft?")
+        self.assertNotIn("Prüfung:", answer)
+        self.assertNotIn("Kritik", answer)
+        self.assertNotIn("Tool:", answer)
+        self.assertIn("Aus dem Verlauf", answer)
+        self.assertIn("t=62s", answer)              # a concrete decision time
+        self.assertIn("Hysterese", answer)
+        self.assertIn("Frage: Warum wechselt die Phase so oft?", answer)
+        self.assertTrue(answer.rstrip().endswith(
+            "(Offline-Explainer — setze FEATHERLESS_API_KEY für freie Antworten.)"))
+
+    def test_junction_without_decisions_still_narrates(self):
+        run = {**self.RUN, "adaptive": {"decisions": []}}
+        answer = fallback_explain(run, "Was ist hier los?")
+        self.assertNotIn("Beispiel:", answer)
+        self.assertIn("Hysterese", answer)
+
+    def test_network_payload_keeps_district_narrative(self):
+        net = {"region": "expo_riem", "name": "Neu-Riem",
+               "scenario": {"label": "Normal (Wochentag)"},
+               "summary": {"fixed": {"avg_delay_s": 40.0, "throughput_vph": 3000,
+                                     "avg_travel_time_s": 180.0, "co2_g": 90000,
+                                     "served": 5000},
+                           "adaptive": {"avg_delay_s": 30.0, "throughput_vph": 3100,
+                                        "avg_travel_time_s": 170.0, "co2_g": 70000,
+                                        "served": 5100},
+                           "coordinated": {"avg_delay_s": 33.0}},
+               "improvement": {"avg_delay_pct": 25.0, "throughput_pct": 3.0,
+                               "avg_travel_pct": 5.0, "co2_pct": 22.0}}
+        answer = fallback_explain(net, "Was macht adaptiv im Viertel?")
+        self.assertIn("Aus dem Verlauf von „Neu-Riem“", answer)
+        self.assertIn("grüne Welle", answer)
+        self.assertNotIn("Prüfung:", answer)
+        self.assertNotIn("decisions", answer)       # no decision log at district level
 
 
 if __name__ == "__main__":
