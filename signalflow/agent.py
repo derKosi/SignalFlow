@@ -170,12 +170,17 @@ _KPI_NETWORK = ("avg_delay_s", "throughput_vph", "avg_travel_time_s", "co2_g", "
 
 
 def simulate_digest(result: dict) -> dict:
+    ran_keys = ("demand_scenario", "demand_multiplier", "junction_type",
+                "vehicle_mix", "transit_priority", "duration_min", "seed",
+                "time_from", "time_to", "warmup_min")
     return {
         "tool": "simulate",
-        "ran": {k: result["config"].get(k) for k in
-                ("demand_scenario", "demand_multiplier", "junction_type",
-                 "vehicle_mix", "transit_priority", "duration_min", "seed")},
+        "ran": {k: result["config"].get(k) for k in ran_keys},
         "scenario_label": result["scenario"]["label"],
+        # every strategy that ran (signalised: fixed/adaptive/coordinated/tuned)
+        "policies": {pol: _pick(s, _KPI_JUNCTION)
+                     for pol, s in result["summary"].items()
+                     if isinstance(s, dict)},
         "fixed": _pick(result["summary"]["fixed"], _KPI_JUNCTION),
         "adaptive": _pick(result["summary"]["adaptive"], _KPI_JUNCTION),
         "improvement": result["improvement"],
@@ -394,8 +399,16 @@ def _deterministic_answer(question: str, toolbox: ToolBox) -> dict:
         f"{f['throughput_vph']} Fz/h Durchsatz.\n"
         f"Adaptive Steuerung: {a['avg_delay_s']} s ({imp['avg_delay_pct']} % weniger), "
         f" Durchsatz {imp['throughput_pct']} % höher, CO₂-Proxy {imp['co2_pct']} % niedriger. "
-        "(Deterministischer Fallback ohne LLM-Schlüssel.)"
     )
+    pol = digest.get("policies") or {}
+    co, tu = pol.get("coordinated"), pol.get("tuned")
+    if co:
+        answer += (f"\nKoordiniert (grüne Welle): {co['avg_delay_s']} s — am Einzelknoten "
+                   f"≈ Fixed, der Gewinn entsteht erst mit Nachbarn (Gebiets-Ansicht).")
+    if tu:
+        answer += (f"\nTuned* (Pläne aus Zählungen): {tu['avg_delay_s']} s — der Großteil "
+                   f"des Adaptiv-Vorteils ohne live Steuerung.")
+    answer += " (Deterministischer Fallback ohne LLM-Schlüssel.)"
     return {"answer": answer, "steps": [{"tool": "simulate", "args": cfg, "ok": True,
                                          "digest": digest}]}
 

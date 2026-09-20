@@ -390,3 +390,63 @@ the same seeds; the LLM summary appears with the key and degrades gracefully wit
 Total about 6-8 h. Everything stays in the existing stack; tests must stay green after
 each step, and the demo path (`/api/explain`, dashboards, precompute) must keep working
 unchanged while the new endpoint is added beside it.
+
+## 15. Session 2026-09-20 — four policies at the junction + wall-clock windows
+
+Shipped (all Playwright-verified, 108 tests green):
+
+* **Junction engine compares four strategies** on identical arrivals
+  (`signalflow/simulation.py`):
+  * `CoordinatedController` — corridor plan at an isolated node: master cycle
+    90 s (`coord_cycle_s`), progression offset (`coord_offset_s`), green-share
+    bias toward the busier axis (`coord_bias`). Honest expectation ≈ fixed or
+    slightly worse locally; the win shows up in the district model only.
+  * `TunedController` — **multi-period** Webster plans from stop-line detector
+    counts (PCE-weighted, peak hour *within* each clock bucket
+    `TUNED_BUCKETS = (6–10, 10–15, 15–21)`), switched by the clock. Daily-mean
+    counts undersize the cycle and collapse at rush — peak-hour design is the
+    fix. Phase y = max critical flow ratio (not summed lane capacity).
+  * Clock-based within-day profiles `CLOCK_PROFILES` (commute/peak/leisure/flat)
+    evaluated at wall clock; peaks calibrated to sit just below junction
+    capacity (v/c ~0.85–0.9) — sustained oversaturation would collapse a
+    whole-day run and no real plan has to survive that either.
+  * `warmup_min` (junction default 15): simulated before the window, excluded
+    from KPIs/frames/decisions — the system starts "in traffic".
+  * `duration_min` auto-derives from the window span unless pinned; overnight
+    windows (from > to) wrap over midnight. Payload: `summary/tuned`,
+    `summary/coordinated`, per-policy `plan` info (feeds the "Warum?" tabs).
+* **Network engine** (`signalflow/network.py`): `time_from/time_to/warmup_min`
+  (default 5). Windows longer than the simulated span run as an explicit
+  **time-lapse, but volumes stay 1:1** — only the demand *shape* follows the
+  compressed clock. Scaling inflow by the lapse factor collapses the queue
+  physics (measured: Ø delay 9 900 s nonsense on Berlin Mitte); clock-only
+  compression keeps KPIs honest and the day's shape visible.
+  `meta.clock_rate` documents the compression.
+* **Junction dashboard** (`web/index.html`, `app.js`, `styles.css`):
+  settings regrouped (Nachfrage / Szenerie / Experten with one-line
+  explanations), "Simulieren" as a prominent button inside the panel (header
+  button removed), the Dauer slider is gone (the window IS the span).
+  Viewer: per-strategy toggle buttons + "Alle" left of the speed group;
+  1/2/4-canvas grid (`#canvas-wrap[data-n]`, per-key crossing vehicles).
+  KPI cards/table have one row per strategy with the network page's colours
+  (fixed #aab6c4, adaptive accent, koord #f5c451, tuned #7fd1a8). Charts:
+  bars for all strategies; the time-series panel is an **area chart with
+  metric chips (Warteschlangen / Verzögerung ∑ / CO₂ ∑) and a von–bis zoom**
+  (clock inputs, playhead-aware). "Warum?" panel has per-strategy tabs:
+  adaptive shows the switch log + pressure table, the others show their plan
+  (cycle/greens/source, Tuned lists its three clock buckets).
+* **Ask panel** (`web/ask.js` + both pages): one-click **suggestion chips** and
+  an optional `computeAnswer(q)` hook — the junction page answers the
+  "Adaptiv vs. Tuned zur Stoßzeit?" question **locally from the frames**
+  (peak-window queue averages per strategy; honestly confirms *or corrects*
+  the premise; source pill "Analyse · lokal berechnet").
+* **Network dashboard**: same time-window control (scenario presets windows,
+  clock pills, clock x-axis on the load chart incl. the Koord. line), Dauer
+  slider removed, `.net-controls .time-control` spans two grid columns.
+* Roundabout re-verified by pixel scan: island stays empty (0 hits across
+  sampled frames), vehicles circulate the ring — left turns travel 3/4 of the
+  ring CCW, right turns 1/4, through 1/2.
+* UI label is "Tuned" (no asterisk) everywhere; the writeups keep "Tuned*"
+  as the method name where they explain it.
+* Disk cache: cleared after engine semantics changed (old payloads would have
+  served stale results for identical config keys).

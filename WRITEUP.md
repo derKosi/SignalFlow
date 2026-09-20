@@ -165,17 +165,26 @@ Für eine Simulation ist jede dieser Annahmen ordnungsgemäß — wir legen sie 
 
 ## Ausblick — Zeit-, tag- und verkehrsabhängige Steuerung
 
-Erster Schritt gebaut: das **Tageszeit-Fenster** im Kreuzungs-Dashboard wählt
-Szenario und Last automatisch (Mo–Fr Stoßzeit → Berufsverkehr, Wochenende
-Mittag → Freizeit-Hügel, nachts weniger, Ferien ≈ −30 %). Die eigentliche
+Erster Schritt gebaut — und deutlich ausgebaut: Das **Tageszeit-Fenster** in
+beiden Dashboards setzt Szenario und Zeitraum (Szenario schlägt das Fenster
+vor, alles frei anpassbar), und die **Nachfrage folgt der echten Uhrzeit** im
+Fenster — Berufsverkehr 07–18 Uhr bildet dadurch beide Wellen ab. Vor dem
+Fenster läuft ein **Warm-up** (15 min Kreuzung / 5 min Gebiet), dessen Ergebnisse
+nicht gezählt werden: die Simulation startet "im Verkehr", nicht leer. Der
+Kreuzungs-Vergleich führt inzwischen **alle vier Strategien** auf identischen
+Ankünften aus; Tuned leitet daraus je Tageszeit einen eigenen
+Webster-Plan ab (Mehrfahrzeitenplan, wie in der Praxis). Die eigentliche
 Forschungsfrage dahinter: eine Steuerung, die nicht nur auf *Verkehr*, sondern
-auch auf **Zeit und Tag** reagiert — Our Sweep-Ergebnisse legen nahe: Adaptiv
-gewinnt zur Rush, die Grüne Welle am Wochenend-Arterial, getunte Pläne in
-schwächeren Randzeiten. Offene Fragen: stochastische Zeitreihen-Ankünfte im
-Gebietsmodell (heute flussbasiert-deterministisch), tagesganggetriebene
-Strategie-Wahl pro Knoten mit Umschalt-Hysterese, und Kalibrierung an echte
-Zähldatenreihen. Die Timer in den Ampeln sind technisch das geringste Problem —
-die Steuerungslogik ist der Forschungsgegenstand.
+auch auf **Zeit und Tag** reagiert — unsere Messreihe legt nahe: Adaptiv
+gewinnt im Tagesmittel und zur Rush am Einzelknoten, die Grüne Welle auf dem
+Korridor (Gebiets-Ansicht), getunte Pläne in schwächeren Randzeiten. Offene
+Fragen: stochastische Zeitreihen-Ankünfte im Gebietsmodell (heute
+flussbasiert-deterministisch), tagesganggetriebene Strategie-Wahl pro Knoten
+mit Umschalt-Hysterese, und Kalibrierung an echte Zähldatenreihen. Die Timer
+in den Ampeln sind technisch das geringste Problem — die Steuerungslogik ist
+der Forschungsgegenstand. Nächster naturaler Schritt in der UI: eine
+**Wochenansicht** (Mo–So-Profil, je Tag ein Typntag), aus der die
+Strategie-Wahl pro Tag direkt ablesbar würde.
 
 ## 8. Literatur
 

@@ -105,19 +105,29 @@ def build_context(payload: dict, question: str) -> str:
     a = s.get("adaptive", {})
     imp = payload.get("improvement", {})
     decisions = (payload.get("adaptive", {}) or {}).get("decisions", [])[:8]
+    scen = payload.get("scenario") or {}
+    win = f"{scen.get('time_from')}–{scen.get('time_to')}" if scen.get("clock") else "none"
 
     lines = [
         f"QUESTION: {question}",
         "",
-        "METRICS (fixed-time baseline vs adaptive):",
-        f"- avg delay: {f.get('avg_delay_s')}s -> {a.get('avg_delay_s')}s "
-        f"({imp.get('avg_delay_pct')}% reduction)",
-        f"- throughput: {f.get('throughput_vph')} -> {a.get('throughput_vph')} veh/h "
-        f"({imp.get('throughput_pct')}%)",
-        f"- max queue: {f.get('max_queue')} -> {a.get('max_queue')} "
-        f"({imp.get('max_queue_pct')}%)",
-        f"- wasted green: {f.get('wasted_green_s')}s -> {a.get('wasted_green_s')}s",
-        f"- CO2 proxy: {f.get('co2_g')}g -> {a.get('co2_g')}g ({imp.get('co2_pct')}%)",
+        f"SETUP: scenario={scen.get('name')}, wall-clock window={win} "
+        f"(demand follows the real clock; 0 = window start), "
+        f"vehicle mix PCE={scen.get('pce_avg')}",
+        "",
+        "METRICS PER STRATEGY (identical arrivals; fixed is the baseline):",
+    ]
+    for pol, v in s.items():
+        if not isinstance(v, dict):
+            continue
+        lines.append(
+            f"- {pol}: avg delay {v.get('avg_delay_s')}s, throughput "
+            f"{v.get('throughput_vph')} veh/h, max queue {v.get('max_queue')}, "
+            f"wasted green {v.get('wasted_green_s')}s, CO2 {v.get('co2_g')}g"
+        )
+    lines += [
+        f"(adaptive vs fixed: delay {imp.get('avg_delay_pct')}%, "
+        f"throughput {imp.get('throughput_pct')}%)",
         "",
         "RECENT ADAPTIVE DECISIONS (t, switch, reason, pressures):",
     ]
@@ -247,6 +257,19 @@ def fallback_explain(payload: dict, question: str) -> str:
             f"Example decision (t={d0.get('t')}s): {d0.get('reason')}. "
             f"The choice only fires when a competing phase's pressure exceeds the current "
             f"phase by the hysteresis margin, which prevents green-time churn."
+        )
+    co, tu = s.get("coordinated"), s.get("tuned")
+    if isinstance(co, dict) and co.get("avg_delay_s") is not None:
+        parts.append(
+            f"The coordinated green wave lands at {co.get('avg_delay_s')}s: bound to its "
+            f"corridor master cycle it cannot always pick the locally best split — its "
+            f"benefit appears on corridors (district view), not at a single junction."
+        )
+    if isinstance(tu, dict) and tu.get("avg_delay_s") is not None:
+        parts.append(
+            f"Tuned* reaches {tu.get('avg_delay_s')}s using only stop-line counts "
+            f"(Webster plans per time of day) — most of the adaptive gain without "
+            f"live control."
         )
     parts.append(
         f"Net effect: about {imp.get('co2_pct')}% less idling-related CO2 proxy. "

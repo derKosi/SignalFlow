@@ -27,7 +27,7 @@
     </span>
     <div class="brand-text">
       <h1>SignalFlow · Netzwerksimulation</h1>
-      <p class="sub">Distrikt-Simulation auf OpenStreetMap-Netz — Fixed-Time vs. adaptiv</p>
+      <p class="sub">Distrikt-Simulation auf OpenStreetMap-Netz — Fixed, adaptiv, grüne Welle, Tuned</p>
     </div>
   </div>
 
@@ -81,25 +81,36 @@
 
     <div class="net-controls">
       <div class="control">
-        <label for="ctl-duration" title="Länge des simulierten Durchgangs (5–60 min) — kein Tageszeitbezug: das Szenario (z. B. Berufsverkehr) skaliert die Nachfrage über die Laufzeit">Dauer (min)</label>
-        <input id="ctl-duration" type="range" min="5" max="60" step="1" value="15" />
-        <output id="val-duration" for="ctl-duration">15</output>
+        <label for="ctl-scenario" title="Tagestyp: legt die Form des Tagesgangs fest und setzt ein passendes Zeitfenster vor">Szenario (Tagesgang)</label>
+        <select id="ctl-scenario">
+          <option value="normal">Normal (Wochentag, Tagesgeschäft)</option>
+          <option value="berufsverkehr">Berufsverkehr (Mo–Fr, 2 Spitzen)</option>
+          <option value="ferien">Ferien (flau, keine Spitze)</option>
+          <option value="freizeit">Wochenende (Mittagshügel)</option>
+        </select>
+        <span class="desc">setzt Zeitfenster vor, frei anpassbar</span>
+      </div>
+
+      <div class="control time-control">
+        <label for="ctl-time-from" title="Simulierter Zeitraum: die Nachfrage folgt der echten Uhrzeit. Längere Zeiträume werden auf die Simulationsdauer komprimiert — nur die Uhr läuft schneller, die Verkehrsmengen bleiben unverzerrt. 5 min Aufwärmen vor Start.">Zeitfenster (Uhrzeit)</label>
+        <div class="time-row">
+          <select id="ctl-dow" aria-label="Wochentag">
+            <option value="wd">Mo–Fr</option>
+            <option value="sa">Sa</option>
+            <option value="so">So</option>
+          </select>
+          <input id="ctl-time-from" type="time" value="07:00" aria-label="von" />
+          <span class="time-sep">–</span>
+          <input id="ctl-time-to" type="time" value="18:00" aria-label="bis" />
+        </div>
+        <span id="time-hint" class="time-hint"></span>
       </div>
 
       <div class="control">
         <label for="ctl-load">Last (×)</label>
         <input id="ctl-load" type="range" min="0.5" max="1.4" step="0.05" value="1.0" />
         <output id="val-load" for="ctl-load">1.00</output>
-      </div>
-
-      <div class="control">
-        <label for="ctl-scenario">Szenario</label>
-        <select id="ctl-scenario">
-          <option value="normal">Normal</option>
-          <option value="berufsverkehr">Berufsverkehr</option>
-          <option value="ferien">Ferien</option>
-          <option value="freizeit">Freizeit/WE</option>
-        </select>
+        <span class="desc">Skaliert die Nachfrage zusätzlich</span>
       </div>
 
       <div class="control">
@@ -109,6 +120,7 @@
           <option value="city">Stadt (Pkw/Van/Lkw/Bus)</option>
           <option value="truck">Lkw-lastig</option>
         </select>
+        <span class="desc">schwere Fahrzeuge belegen mehr Platz</span>
       </div>
 
       <div class="control">
@@ -117,18 +129,21 @@
           <option value="off">aus</option>
           <option value="on">an (TSP)</option>
         </select>
+        <span class="desc">Busse warten weniger lange</span>
       </div>
 
       <div class="control">
         <label for="ctl-seed" title="Wirkt aktuell nur im Kreuzungsmodell — das Gebietsmodell ist flussbasiert und vollständig deterministisch (gleiche Parameter → gleiche Ergebnisse)">Seed</label>
         <input id="ctl-seed" type="range" min="1" max="999" step="1" value="42" />
         <output id="val-seed" for="ctl-seed">42</output>
+        <span class="desc">ohne Wirkung (deterministisch)</span>
       </div>
 
       <div class="control">
         <label for="ctl-vph">Verkehr (veh/h)</label>
         <input id="ctl-vph" type="range" min="2000" max="12000" step="250" value="6500" />
         <output id="val-vph" for="ctl-vph">6500</output>
+        <span class="desc">Gesamtnachfrage ins Netz</span>
       </div>
     </div>
 
@@ -169,13 +184,14 @@
       <div class="modes" role="group" aria-label="Controller-Ansicht">
         <button class="mode-btn" data-mode="fixed" type="button">Fixed</button>
         <button class="mode-btn" data-mode="adaptive" type="button">Adaptive</button>
-        <button class="mode-btn" data-mode="coordinated" type="button" title="Grüne Welle: gemeinsamer Zyklus + Versatz-Offsets — die dritte animierbare Strategie (Tuned* liefert nur Kennzahlen, keine Animation)">Koord.</button>
+        <button class="mode-btn" data-mode="coordinated" type="button" title="Grüne Welle: gemeinsamer Zyklus + Versatz-Offsets — die dritte animierbare Strategie (Tuned liefert nur Kennzahlen, keine Animation)">Koord.</button>
         <button class="mode-btn active" data-mode="both" type="button">Beide</button>
       </div>
 
       <div class="readouts">
         <span class="pill" title="Summe aller Warteschlangen im Netz (wartende Fahrzeuge) — nicht die Zahl aller Fahrzeuge; im Modus „Beide“ wird Adaptive gezeigt"><span class="k">Netzlast</span> <b id="playhead-q" class="mono">–</b></span>
-        <span class="pill mono" title="Simulierte Laufzeit im laufenden Durchgang (mm:ss) — kein Tageszeitbezug"><span class="k">t</span> <b id="playhead-t">00:00</b></span>
+        <span class="pill" title="Uhrzeit im simulierten Zeitfenster"><span class="k">Uhrzeit</span> <b id="playhead-clock">–</b></span>
+        <span class="pill mono" title="Simulierte Position im Zeitfenster"><span class="k">t</span> <b id="playhead-t">00:00</b></span>
       </div>
     </div>
 
@@ -214,7 +230,7 @@
     </div>
     <div class="panel chart-panel">
       <h2>Netzlast über die Zeit</h2>
-      <p class="panel-sub">Summe der Warteschlangen je Frame (veh) — simulierte Laufzeit, keine Uhrzeit · Fixed vs. Adaptive</p>
+      <p class="panel-sub">Summe der Warteschlangen über der Uhrzeit (veh) · Fixed, Adaptiv, Koord.</p>
       <canvas id="chart-load"></canvas>
     </div>
   </section>

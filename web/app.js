@@ -83,27 +83,43 @@
     grid: '#1e2a37', axis: '#4a5563', txt: '#8b98a7',
   };
 
+  // the compared strategies (colour-consistent with the network dashboard)
+  const POLICY_META = [
+    { key: 'fixed', label: 'Fixed', color: '#aab6c4',
+      info: 'Fester Signalplan mit vordefinierten Grünzeiten — reagiert nicht auf den live Verkehr (Baseline)' },
+    { key: 'adaptive', label: 'Adaptiv', color: '#2dd4bf',
+      info: 'SignalFlow: Phasenlängen reagieren live auf den Warteschlangen-Druck jeder Richtung (Max-Pressure)' },
+    { key: 'coordinated', label: 'Koord.', color: '#f5c451',
+      info: 'Grüne Welle: Korridor-Takt 90 s, Grünanteile zugunsten der Hauptachse. An der isolierten Kreuzung ≈ Fixed — der Gewinn entsteht erst mit Nachbarn (Netzwerk-Ansicht)' },
+    { key: 'tuned', label: 'Tuned', color: '#7fd1a8',
+      info: 'Webster-Pläne aus Stopp-Linien-Zählungen (Detektor-Daten), je Tageszeit — keine live Anpassung während der Fahrt' },
+  ];
+  const polByKey = (k) => POLICY_META.find((p) => p.key === k) || POLICY_META[0];
+
   /* ===========================================================================
    * 2) STATE
    * ======================================================================== */
   const state = {
     baseConfig: clone(DEFAULT_CONFIG),
     result: null,
-    summaryFixed: null,
-    summaryAdaptive: null,
-    fixedFrames: [],
-    adaptiveFrames: [],
+    summaries: {},          // policy key -> summary  (fixed, adaptive, …)
+    framesBy: {},           // policy key -> frames[]
+    plans: {},              // policy key -> plan info (fixed/coordinated/tuned)
     decisions: [],
+    availablePolicies: ['fixed', 'adaptive'],
     frameDt: 4,
-    duration: 1800,       // seconds
+    duration: 1800,         // seconds
     metaGenerated: '',
-    // playback
-    mode: 'adaptive',     // 'fixed' | 'adaptive' | 'both'
+    // playback: which strategies are shown (subset of availablePolicies)
+    visible: { fixed: true, adaptive: true, coordinated: true, tuned: true },
+    decTab: 'adaptive',
+    chartMetric: 'queue',     // 'queue' | 'delay' | 'co2'
+    zoom: null,               // {from, to} minutes-of-day, null = whole window
     playing: false,
     speed: 1,
     baseSpeed: 1,
-    crossing: [],          // vehicles currently driving through the junction
-    crossSpawn: {},        // last sim-time a crossing vehicle was spawned per movement
+    crossingBy: {},         // policy key -> vehicles currently driving through
+    crossSpawnBy: {},       // policy key -> last sim-time a crossing vehicle spawned per movement
     autoSpeak: false,
     t: 0,
     // panels
@@ -201,11 +217,13 @@
   // ---- build the POST body from base config + UI controls ------------------
   function buildConfig() {
     const cfg = clone(state.baseConfig);
-    cfg.duration_min = +$('ctl-duration').value;
     cfg.demand_multiplier = +$('ctl-load').value;
-    const prof = $('ctl-profile');
-    if (prof) cfg.demand_profile = prof.value;   // legacy; the scenario sets the shape
     cfg.seed = +$('ctl-seed').value;
+    // the wall-clock window IS the simulated span; the engine warms up before it
+    cfg.time_from = ($('ctl-time-from').value || null);
+    cfg.time_to = ($('ctl-time-to').value || null);
+    cfg.warmup_min = 15;
+    cfg.duration_min = spanMinutes(cfg.time_from, cfg.time_to) || 30;
     const jt = document.getElementById('ctl-junction');
     if (jt) cfg.junction_type = jt.value;
     const src = document.getElementById('ctl-source');
@@ -224,6 +242,14 @@
     if (tsp) cfg.transit_priority = tsp.value === 'on';
     cfg.dt = 1;
     return cfg;
+  }
+
+  // window span in minutes (to before from crosses midnight)
+  function spanMinutes(fromS, toS) {
+    if (!fromS || !toS) return 0;
+    const min = (s) => { const [h, m] = s.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+    const a = min(fromS), b = min(toS);
+    return ((b - a + 1440) % 1440) || 1440;
   }
 
   // ---- run a simulation (network first, offline demo as fallback) ----------
@@ -260,10 +286,25 @@
 
   function applyPayload(res, usedDemo) {
     state.result = res;
-    state.summaryFixed = res.summary.fixed;
-    state.summaryAdaptive = res.summary.adaptive;
-    state.fixedFrames = (res.fixed && res.fixed.frames) || [];
-    state.adaptiveFrames = (res.adaptive && res.adaptive.frames) || [];
+    state.summaries = res.summary || {};
+    state.framesBy = {
+      fixed: (res.fixed && res.fixed.frames) || [],
+      adaptive: (res.adaptive && res.adaptive.frames) || [],
+      coordinated: (res.coordinated && res.coordinated.frames) || [],
+      tuned: (res.tuned && res.tuned.frames) || [],
+    };
+    state.plans = {
+      fixed: (res.fixed && res.fixed.plan) || null,
+      coordinated: (res.coordinated && res.coordinated.plan) || null,
+      tuned: (res.tuned && res.tuned.plan) || null,
+    };
+    state.availablePolicies = POLICY_META
+      .filter((p) => state.summaries[p.key] && state.framesBy[p.key].length)
+      .map((p) => p.key);
+    for (const p of POLICY_META) {
+      if (state.availablePolicies.indexOf(p.key) < 0) state.visible[p.key] = false;
+    }
+    if (!POLICY_META.some((p) => state.visible[p.key])) state.visible.fixed = true;
     state.decisions = (res.adaptive && res.adaptive.decisions) || [];
     state.frameDt = (res.meta && res.meta.frame_dt) || state.frameDt || 4;
     state.duration = (res.meta && res.meta.steps) ||
@@ -271,23 +312,31 @@
     state.junction = res.junction || null;
     state.metaGenerated = (res.meta && res.meta.generated) || (usedDemo ? 'offline demo' : '');
     state.selectedDecision = Math.max(0, state.decisions.length - 1);
+    if (state.availablePolicies.indexOf(state.decTab) < 0) state.decTab = 'adaptive';
+    // zoom follows the new window
+    state.zoom = null;
+    const zf = $('zoom-from'), zt = $('zoom-to');
+    if (zf && zt && res.meta && res.meta.time_from) {
+      zf.value = res.meta.time_from;
+      zt.value = res.meta.time_to || res.meta.time_from;
+    }
 
-    // reset playhead, start animating. Default = watchable 10x (one signal cycle
-    // ~10 s), so queues are visibly draining. The 0.5/1/2/4 buttons multiply this.
+    // reset playhead, start animating. Base speed scales with the window so a
+    // full day plays back in a few minutes; the 0.5/1/2/4 buttons multiply it.
     state.t = 0;
-    state.baseSpeed = 10;
+    state.baseSpeed = clamp(Math.round(state.duration / 120), 10, 120);
     state.speed = state.baseSpeed;
-    state.crossing = [];
-    state.crossSpawn = {};
+    state.crossingBy = {};
+    state.crossSpawnBy = {};
     setPlaying(true);
     updateSpeedReadout();
 
-    renderKPIs();
     buildKpiCards();
     buildKpiTable();
     renderKPIs();
     renderCharts();
     renderDecisions();
+    syncPolicyButtons();
     renderMeta(usedDemo);
     if (state.autoSpeak && window.SFAsk) SFAsk.speakResult();
     // auto-ask? no. keep user driven.
@@ -324,62 +373,65 @@
 
   function renderMeta(usedDemo) {
     if (!state.result) return;
-    const s = state.summaryAdaptive || {};
+    const a = state.summaries.adaptive || {};
+    const fx = state.summaries.fixed || {};
+    const c = clockString(0);
     $('meta-info').textContent =
-      `${state.metaGenerated || 'SignalFlow'} · ${state.duration}s · adaptive Ø-Delay ${fmt(s.avg_delay_s, 1)}s` +
+      `${state.metaGenerated || 'SignalFlow'} · ${timeStr(state.duration)}${c ? ' ab ' + c + ' Uhr' : ''} · ` +
+      `Ø Verzögerung: Fixed ${fmt(fx.avg_delay_s, 1)}s → Adaptiv ${fmt(a.avg_delay_s, 1)}s` +
       (usedDemo ? ' · OFFLINE-DEMO' : '');
   }
 
   /* ===========================================================================
-   * 6) KPI CARDS
+   * 6) KPI CARDS / TABLE  (one row per strategy)
    * ======================================================================== */
+  // strategies available in the current result (roundabout swaps two of them)
+  function activePolicies() {
+    return POLICY_META.filter((p) => state.summaries[p.key]);
+  }
+
   function buildKpiCards() {
     const grid = $('kpi-grid');
     grid.innerHTML = '';
-    const jl = state.junction || {};
-    const refL = jl.reference_label || 'Fixed';
-    const altL = jl.alternative_label || 'Adaptive';
+    const pols = activePolicies();
     for (const m of KPI_META) {
       const card = document.createElement('article');
       card.className = 'kpi';
+      const rows = pols.map((p) => `
+          <div class="row pol-${p.key}"><span class="tag" title="${p.info}">${p.label}</span>` +
+        (p.key === 'fixed'
+          ? '<i class="dlt"></i>'
+          : `<i class="dlt" data-kpi="${m.key}-${p.key}-delta" title="Δ gegenüber Fixed — positiv = besser">–</i>`) +
+        `<b data-kpi="${m.key}-${p.key}">–</b></div>`).join('');
       card.innerHTML = `
         <header><h3 title="${m.info}">${m.title}</h3><span class="unit">${m.unit}</span></header>
-        <div class="kpi-rows">
-          <div class="row fixed"><span class="tag" title="${POLICY_INFO.fixed}">${refL}</span><i class="dlt"></i><b data-kpi="${m.key}-fixed">–</b></div>
-          <div class="row adaptive"><span class="tag" title="${POLICY_INFO.adaptive}">${altL}</span><i class="dlt" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i><b data-kpi="${m.key}-adaptive">–</b></div>
-        </div>`;
+        <div class="kpi-rows">${rows}</div>`;
       grid.appendChild(card);
     }
   }
 
   // Compact matrix alternative to the cards: policies as rows, metrics as
-  // columns, traffic-light deltas (green/orange/red) under the adaptive
-  // values. Both views share the data-kpi hooks, so renderKPIs updates
-  // whichever is visible.
-  const POLICY_INFO = {
-    fixed: 'Fester Signalplan mit vordefinierten Grünzeiten — reagiert nicht auf den live Verkehr (Baseline)',
-    adaptive: 'SignalFlow: Phasenlängen reagieren live auf den Warteschlangen-Druck jeder Richtung (Max-Pressure)',
-  };
+  // columns, Δ vs Fixed next to each value. Both views share the data-kpi
+  // hooks, so renderKPIs updates whichever is visible.
   function buildKpiTable() {
     const wrap = $('kpi-table-wrap');
     if (!wrap) return;
-    const jl = state.junction || {};
-    const refL = jl.reference_label || 'Fixed';
-    const altL = jl.alternative_label || 'Adaptive';
+    const pols = activePolicies();
     const head = KPI_META.map((m) =>
       `<th colspan="2" title="${m.info}">${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
     const subHeads = KPI_META.map(() => '<th class="sub">Wert</th><th class="sub">Δ</th>').join('');
-    const fixedCells = KPI_META.map((m) =>
-      `<td class="v" data-kpi="${m.key}-fixed">–</td><td class="dltc">–</td>`).join('');
-    const adaptiveCells = KPI_META.map((m) =>
-      `<td class="v adaptive-v" data-kpi="${m.key}-adaptive">–</td>` +
-      `<td class="dltc"><i class="dlt" data-kpi="${m.key}-delta" title="Δ gegenüber Fixed-Time — positiv = besser">–</i></td>`).join('');
+    const bodyRows = pols.map((p) => {
+      const cells = KPI_META.map((m) => {
+        const dlt = p.key === 'fixed'
+          ? '<td class="dltc">–</td>'
+          : `<td class="dltc"><i class="dlt" data-kpi="${m.key}-${p.key}-delta" title="Δ gegenüber Fixed — positiv = besser">–</i></td>`;
+        return `<td class="v pol-v" data-kpi="${m.key}-${p.key}">–</td>${dlt}`;
+      }).join('');
+      return `<tr class="pol-${p.key}"><th class="pol" title="${p.info}">${p.label}</th>${cells}</tr>`;
+    }).join('');
     wrap.innerHTML = `<table class="kpi-table">
       <thead><tr><th rowspan="2"></th>${head}</tr><tr>${subHeads}</tr></thead>
-      <tbody>
-        <tr class="pol-fixed"><th class="pol" title="${POLICY_INFO.fixed}">${refL}</th>${fixedCells}</tr>
-        <tr class="pol-adaptive"><th class="pol" title="${POLICY_INFO.adaptive}">${altL}</th>${adaptiveCells}</tr>
-      </tbody>
+      <tbody>${bodyRows}</tbody>
     </table>`;
   }
 
@@ -403,27 +455,35 @@
   }
 
   function renderKPIs() {
-    if (!state.summaryFixed || !state.summaryAdaptive) return;
+    const pols = activePolicies();
+    if (!pols.length) return;
     const all = (name) => document.querySelectorAll('[data-kpi="' + name + '"]');
     for (const m of KPI_META) {
-      const fv = m.get(state.summaryFixed);
-      const av = m.get(state.summaryAdaptive);
-      all(m.key + '-fixed').forEach((el) => { el.textContent = fmt(fv, m.dec); });
-      all(m.key + '-adaptive').forEach((el) => { el.textContent = fmt(av, m.dec); });
+      const vals = pols.map((p) => ({ p, v: m.get(state.summaries[p.key]) }));
+      for (const { p, v } of vals) {
+        all(m.key + '-' + p.key).forEach((el) => { el.textContent = fmt(v, m.dec); });
+      }
 
-      // winner per metric: bold the better value (direction-aware, ties bold both)
-      const betterAdaptive = m.dir === 'up' ? av > fv : av < fv;
-      const tie = av === fv;
-      all(m.key + '-fixed').forEach((el) => el.classList.toggle('best', tie || !betterAdaptive));
-      all(m.key + '-adaptive').forEach((el) => el.classList.toggle('best', tie || betterAdaptive));
+      // winner per metric across all strategies (direction-aware, ties bold all)
+      const best = vals.reduce((b, x) =>
+        m.dir === 'up' ? (x.v > b.v ? x : b) : (x.v < b.v ? x : b), vals[0]);
+      for (const { p, v } of vals) {
+        all(m.key + '-' + p.key).forEach((el) => el.classList.toggle('best', v === best.v));
+      }
 
-      all(m.key + '-delta').forEach((dEl) => {
-        if (!fv) { dEl.textContent = 'n/a'; return; }
-        // signed improvement: > 0 always means "better than Fixed-Time"
-        const pct = m.dir === 'up' ? (av - fv) / fv * 100 : (fv - av) / fv * 100;
-        dEl.textContent = (pct >= 0 ? '+' : '−') + fmt(Math.abs(pct), 1) + ' %';
-        dEl.title = pct >= 0 ? 'Verbesserung gegenüber Fixed-Time' : 'Verschlechterung gegenüber Fixed-Time';
-      });
+      // Δ vs Fixed (signed: > 0 always means "better than Fixed")
+      const fv = (vals.find((x) => x.p.key === 'fixed') || {}).v;
+      for (const { p, v } of vals) {
+        if (p.key === 'fixed') continue;
+        all(m.key + '-' + p.key + '-delta').forEach((dEl) => {
+          if (!fv) { dEl.textContent = 'n/a'; return; }
+          const pct = m.dir === 'up' ? (v - fv) / fv * 100 : (fv - v) / fv * 100;
+          dEl.textContent = (pct >= 0 ? '+' : '−') + fmt(Math.abs(pct), 1) + ' %';
+          dEl.title = pct >= 0
+            ? 'Verbesserung gegenüber Fixed'
+            : 'Verschlechterung gegenüber Fixed';
+        });
+      }
     }
   }
 
@@ -454,7 +514,7 @@
     ctx.closePath();
   }
 
-  function drawIntersection(canvas, frames, label) {
+  function drawIntersection(canvas, frames, pkey) {
     const { ctx, w, h } = fitCanvas(canvas);
     ctx.clearRect(0, 0, w, h);
     ctx.fillStyle = '#0a0e13';
@@ -547,19 +607,21 @@
     }
 
     // --- vehicles driving through the junction (one per green movement per step) ---
+    const crossing = state.crossingBy[pkey] || (state.crossingBy[pkey] = []);
+    const crossSpawn = state.crossSpawnBy[pkey] || (state.crossSpawnBy[pkey] = {});
     if (state.playing && frame.green) {
       for (const key of frame.green) {
         if (REDUCED) break;
         if (!moveOk(key.split('-')[0], key.split('-')[1])) continue;
-        if ((frame.t - (state.crossSpawn[key] || -999)) >= state.frameDt && state.crossing.length < 80) {
-          state.crossSpawn[key] = frame.t;
+        if ((frame.t - (crossSpawn[key] || -999)) >= state.frameDt && crossing.length < 80) {
+          crossSpawn[key] = frame.t;
           const parts = key.split('-');
-          state.crossing.push({ a: parts[0], turn: parts[1], p: 0,
-                                kind: vehicleKind(key, Math.round(frame.t * 3)) });
+          crossing.push({ a: parts[0], turn: parts[1], p: 0,
+                          kind: vehicleKind(key, Math.round(frame.t * 3)) });
         }
       }
     }
-    for (const c of state.crossing) drawCrossing(ctx, g, c, bands);
+    for (const c of crossing) drawCrossing(ctx, g, c, bands);
 
     // --- labels & center readout ---
     // compass letters sit beside the road, not on the lane markings
@@ -588,7 +650,7 @@
     ctx.fillStyle = 'rgba(139,152,167,.9)';
     ctx.font = '10px ' + FONT;
     ctx.fillText(tText, chipX, chipY + 8);
-    void label;
+    void pkey;
   }
 
   function geom(w, h) {
@@ -877,30 +939,54 @@
     ctx.fillText(txt, w / 2, h / 2);
   }
 
+  function visiblePolicies() {
+    return POLICY_META.filter((p) => state.visible[p.key] &&
+      state.framesBy[p.key] && state.framesBy[p.key].length);
+  }
+
+  // wall-clock string for sim second t (null when no window is configured)
+  function clockString(t) {
+    const res = state.result;
+    const from = res && ((res.meta && res.meta.time_from) ||
+                         (res.scenario && res.scenario.time_from));
+    if (!from) return null;
+    const min = (s) => { const [h, m] = s.split(':').map(Number); return (h || 0) * 60 + (m || 0); };
+    const total = (min(from) + Math.floor(t / 60)) % 1440;
+    return String(Math.floor(total / 60)).padStart(2, '0') + ':' +
+      String(total % 60).padStart(2, '0');
+  }
+
   function drawActiveCanvases() {
     const wrap = $('canvas-wrap');
-    if (state.mode === 'both') {
-      wrap.classList.add('dual');
-      $('cell-main-title').textContent = 'Fixed';
-      $('cell-alt-title').textContent = 'Adaptive';
-      drawIntersection($('canvas-main'), state.fixedFrames, 'fixed');
-      drawIntersection($('canvas-alt'), state.adaptiveFrames, 'adaptive');
-    } else {
-      wrap.classList.remove('dual');
-      $('cell-main-title').textContent = state.mode === 'fixed' ? 'Fixed' : 'Adaptive';
-      drawIntersection($('canvas-main'),
-        state.mode === 'fixed' ? state.fixedFrames : state.adaptiveFrames, state.mode);
+    const vis = visiblePolicies();
+    wrap.dataset.n = String(vis.length);
+    for (const p of POLICY_META) {
+      const cell = $('cell-' + p.key);
+      if (cell) cell.hidden = state.visible[p.key] !== true ||
+        !state.framesBy[p.key] || !state.framesBy[p.key].length;
     }
-    // readouts
-    const frames = state.mode === 'fixed' ? state.fixedFrames : state.adaptiveFrames;
-    if (frames && frames.length) {
-      const f = frames[frameIndex(frames)];
+    for (const p of vis) {
+      drawIntersection($('canvas-' + p.key), state.framesBy[p.key], p.key);
+    }
+    // readouts: clock, phase of the first visible strategy, Σ queues of all visible
+    const clockEl = $('playhead-clock');
+    if (clockEl) {
+      const c = clockString(state.t);
+      clockEl.textContent = c ? c + ' Uhr' : '–';
+    }
+    if (vis.length) {
+      const f0 = state.framesBy[vis[0].key];
+      const f = f0[frameIndex(f0)];
       $('playhead-phase').textContent = PHASE_LABEL[f.phase] || f.phase || '–';
       $('playhead-t').textContent = 't ' + timeStr(state.t) + ' / ' + timeStr(state.duration);
       const qel = $('playhead-queue');
       if (qel) {
         let tot = 0;
-        for (const k in (f.q || {})) tot += f.q[k] || 0;
+        for (const p of vis) {
+          const fr = state.framesBy[p.key];
+          const ff = fr[frameIndex(fr)];
+          for (const k in (ff.q || {})) tot += ff.q[k] || 0;
+        }
         qel.textContent = Math.round(tot) + ' veh';
       }
     }
@@ -921,16 +1007,21 @@
     drawDelayChart(); // also drawn in the animation loop for the playhead
   }
 
+  function chartPolicies() {
+    return POLICY_META.filter((p) => state.summaries[p.key]);
+  }
+
   function drawBars(canvas) {
     const { ctx, w, h } = fitCanvas(canvas);
     ctx.clearRect(0, 0, w, h);
-    if (!state.summaryFixed || !state.summaryAdaptive) { centerText(ctx, w, h, 'Keine Daten'); return; }
+    const pols = chartPolicies();
+    if (!pols.length) { centerText(ctx, w, h, 'Keine Daten'); return; }
 
     const padL = 46, padR = 14, padT = 26, padB = 34;
     const plotW = w - padL - padR, plotH = h - padT - padB;
     const n = BAR_METRICS.length;
     const groupW = plotW / n;
-    const barW = Math.min(34, groupW * 0.30);
+    const barW = Math.max(8, Math.min(26, groupW * 0.62 / pols.length));
 
     // grid
     ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
@@ -940,29 +1031,23 @@
     }
 
     BAR_METRICS.forEach((m, i) => {
-      const fv = m.get(state.summaryFixed) || 0;
-      const av = m.get(state.summaryAdaptive) || 0;
-      const max = Math.max(fv, av) * 1.18 || 1;
-      const gx = padL + i * groupW;
-      const center = gx + groupW / 2;
+      const vals = pols.map((p) => ({ p, v: m.get(state.summaries[p.key]) || 0 }));
+      const max = Math.max.apply(null, vals.map((x) => x.v)) * 1.18 || 1;
+      const center = padL + i * groupW + groupW / 2;
+      const groupWpx = vals.length * (barW + 4) - 4;
 
-      const fh = plotH * (fv / max);
-      const ah = plotH * (av / max);
-      const xf = center - barW - 3, xa = center + 3;
-
-      // fixed bar
-      ctx.fillStyle = COL.fixed;
-      rr(ctx, xf, padT + plotH - fh, barW, fh, 4); ctx.fill();
-      // adaptive bar
-      ctx.fillStyle = COL.adaptive;
-      rr(ctx, xa, padT + plotH - ah, barW, ah, 4); ctx.fill();
-
-      // value labels
-      ctx.fillStyle = '#cbd5e1'; ctx.font = '10.5px ' + FONT;
-      ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
-      ctx.fillText(fmt(fv, m.dec), xf + barW / 2, padT + plotH - fh - 3);
-      ctx.fillStyle = COL.adaptive;
-      ctx.fillText(fmt(av, m.dec), xa + barW / 2, padT + plotH - ah - 3);
+      vals.forEach(({ p, v }, k) => {
+        const bh = plotH * (v / max);
+        const bx = center - groupWpx / 2 + k * (barW + 4);
+        ctx.fillStyle = p.color;
+        rr(ctx, bx, padT + plotH - bh, barW, bh, 3); ctx.fill();
+        // value labels only when they fit
+        if (barW >= 14) {
+          ctx.fillStyle = '#cbd5e1'; ctx.font = '9.5px ' + FONT;
+          ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+          ctx.fillText(fmt(v, m.dec), bx + barW / 2, padT + plotH - bh - 2);
+        }
+      });
 
       // category label
       ctx.fillStyle = COL.txt; ctx.font = '11.5px ' + FONT; ctx.textBaseline = 'top';
@@ -973,9 +1058,12 @@
     ctx.strokeStyle = COL.axis;
     line(ctx, padL, padT + plotH, padL + plotW, padT + plotH);
 
-    // legend
-    legendSwatch(ctx, padL, 10, COL.fixed, 'Fixed');
-    legendSwatch(ctx, padL + 78, 10, COL.adaptive, 'Adaptive');
+    // legend (dynamic, left to right)
+    let lx = padL;
+    for (const p of pols) {
+      legendSwatch(ctx, lx, 10, p.color, p.label);
+      lx += 26 + ctx.measureText(p.label).width + 22;
+    }
   }
 
   function legendSwatch(ctx, x, y, color, label) {
@@ -985,26 +1073,77 @@
     ctx.fillText(label, x + 15, y + 5);
   }
 
+  // Verlauf: Flächendiagramm je Strategie — Warteschlangen zum Zeitpunkt oder
+  // kumulierte Verzögerung/CO₂ ("Burn-up"), x-Achse Uhrzeit, mit von–bis-Zoom.
+  const CHART_METRICS = {
+    queue: { title: 'Warteschlangen', note: 'veh in Warteschlangen', unit: 'veh', dec: 0, cum: false,
+      val: (f, q) => q },
+    delay: { title: 'Verzögerung', note: 'kumuliert · veh·s', unit: 'veh·s', dec: 0, cum: true,
+      val: (f) => f.delay_s || 0 },
+    co2: { title: 'CO₂-Proxy', note: 'kumuliert · g', unit: 'g', dec: 0, cum: true,
+      val: (f, q) => (f.delay_s || 0) * (state.result && state.result.config
+        ? state.result.config.co2_idle_g_per_s || 1.15 : 1.15) },
+  };
+
+  // minutes-of-day for sim second t (null when no window is configured)
+  function clockMinAt(t) {
+    const res = state.result;
+    const from = res && ((res.meta && res.meta.time_from) ||
+                         (res.scenario && res.scenario.time_from));
+    if (!from) return null;
+    const p = from.split(':').map(Number);
+    return ((p[0] || 0) * 60 + (p[1] || 0) + Math.floor(t / 60)) % 1440;
+  }
+
+  function minToLabel(min, withUhr) {
+    const m = ((Math.round(min) % 1440) + 1440) % 1440;
+    return String(Math.floor(m / 60)).padStart(2, '0') + ':' +
+      String(m % 60).padStart(2, '0') + (withUhr ? ' Uhr' : '');
+  }
+
   function drawDelayChart() {
     const canvas = $('chart-delay');
     if (!canvas) return;
     const { ctx, w, h } = fitCanvas(canvas);
     ctx.clearRect(0, 0, w, h);
-    if (!state.fixedFrames.length || !state.adaptiveFrames.length) {
-      centerText(ctx, w, h, 'Keine Daten'); return;
-    }
+    const pols = chartPolicies().filter((p) => (state.framesBy[p.key] || []).length);
+    if (!pols.length) { centerText(ctx, w, h, 'Keine Daten'); return; }
+    const met = CHART_METRICS[state.chartMetric] || CHART_METRICS.queue;
 
     const padL = 52, padR = 14, padT = 26, padB = 30;
     const plotW = w - padL - padR, plotH = h - padT - padB;
 
-    // cumulative delay series (veh·s) — frame.delay_s is already cumulative
-    const fx = state.fixedFrames, ax = state.adaptiveFrames;
-    let yMax = 1;
-    for (const f of fx) yMax = Math.max(yMax, f.delay_s || 0);
-    for (const f of ax) yMax = Math.max(yMax, f.delay_s || 0);
-    yMax *= 1.1;
+    // x-domain: sim seconds mapped to minutes-of-day; zoom narrows both
+    const z0 = state.zoom ? state.zoom.from : 0;
+    const z1 = state.zoom ? state.zoom.to : 1440;
+    const x0m = state.zoom ? z0 : (clockMinAt(0) || 0);
+    const x1m = state.zoom ? z1 : ((clockMinAt(state.duration) != null
+      ? clockMinAt(state.duration) : 1440) || 1440);
+    if (x1m <= x0m) { centerText(ctx, w, h, 'Zoom-Bereich leer'); return; }
 
-    const tMax = Math.max(state.duration, 1);
+    // series (queue lightly smoothed; signal cycles add sawtooth noise)
+    const series = pols.map((p) => {
+      const raw = state.framesBy[p.key].map((f) => ({
+        m: clockMinAt(f.t || 0),
+        v: met.val(f, Object.keys(f.q || {}).reduce((s, k) => s + (f.q[k] || 0), 0)),
+      }));
+      const W = met.cum ? 1 : 3;
+      const pts = [];
+      for (let i = 0; i < raw.length; i++) {
+        const r = raw[i];
+        if (r.m == null || r.m < z0 || r.m > z1) continue;
+        let sum = 0, n = 0;
+        for (let k = Math.max(0, i - W + 1); k <= Math.min(raw.length - 1, i + W - 1); k++) {
+          sum += raw[k].v; n++;
+        }
+        pts.push({ m: r.m, v: sum / n });
+      }
+      return { p, pts };
+    });
+
+    let yMax = 1;
+    for (const s of series) for (const pt of s.pts) yMax = Math.max(yMax, pt.v);
+    yMax *= 1.1;
 
     // grid + y labels
     ctx.strokeStyle = COL.grid; ctx.lineWidth = 1;
@@ -1013,18 +1152,33 @@
     for (let i = 0; i <= 4; i++) {
       const y = padT + plotH * i / 4;
       line(ctx, padL, y, padL + plotW, y);
-      ctx.fillText(fmt(yMax * (1 - i / 4), 0), padL - 7, y);
+      ctx.fillText(fmt(yMax * (1 - i / 4), met.dec), padL - 7, y);
     }
-    // x labels (time)
+    // x labels (clock within the zoom window)
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
     for (let i = 0; i <= 4; i++) {
-      const x = padL + plotW * i / 4;
-      ctx.fillText(timeStr(tMax * i / 4), x, padT + plotH + 8);
+      ctx.fillText(minToLabel(x0m + (x1m - x0m) * i / 4, i === 4),
+        padL + plotW * i / 4, padT + plotH + 8);
     }
 
-    // series
-    plotSeries(ctx, fx, padL, padT, plotW, plotH, tMax, yMax, COL.fixed);
-    plotSeries(ctx, ax, padL, padT, plotW, plotH, tMax, yMax, COL.adaptive);
+    const X = (m) => padL + plotW * ((m - x0m) / (x1m - x0m));
+    const Y = (v) => padT + plotH * (1 - clamp(v / yMax, 0, 1));
+
+    // translucent area + line per strategy
+    for (const s of series) {
+      if (s.pts.length < 2) continue;
+      ctx.beginPath();
+      ctx.moveTo(X(s.pts[0].m), Y(0));
+      for (const pt of s.pts) ctx.lineTo(X(pt.m), Y(pt.v));
+      ctx.lineTo(X(s.pts[s.pts.length - 1].m), Y(0));
+      ctx.closePath();
+      ctx.globalAlpha = 0.14; ctx.fillStyle = s.p.color; ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.strokeStyle = s.p.color; ctx.lineWidth = 2;
+      ctx.beginPath();
+      s.pts.forEach((pt, i) => { if (i === 0) ctx.moveTo(X(pt.m), Y(pt.v)); else ctx.lineTo(X(pt.m), Y(pt.v)); });
+      ctx.stroke();
+    }
 
     // axes
     ctx.strokeStyle = COL.axis;
@@ -1032,41 +1186,92 @@
     line(ctx, padL, padT, padL, padT + plotH);
 
     // playhead
-    const px = padL + plotW * clamp(state.t / tMax, 0, 1);
-    ctx.strokeStyle = 'rgba(230,237,243,.35)';
-    ctx.setLineDash([4, 4]);
-    line(ctx, px, padT, px, padT + plotH);
-    ctx.setLineDash([]);
-
-    // legend + axis title
-    legendSwatch(ctx, padL, 10, COL.fixed, 'Fixed');
-    legendSwatch(ctx, padL + 78, 10, COL.adaptive, 'Adaptive');
-    ctx.fillStyle = COL.txt; ctx.font = '10px ' + FONT; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillText('kumuliert · veh·s', w - padR, 10);
-  }
-
-  function plotSeries(ctx, frames, padL, padT, plotW, plotH, tMax, yMax, color) {
-    if (!frames.length) return;
-    ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
-    let started = false;
-    for (let i = 0; i < frames.length; i++) {
-      const f = frames[i];
-      const x = padL + plotW * clamp((f.t || 0) / tMax, 0, 1);
-      const y = padT + plotH * (1 - clamp((f.delay_s || 0) / yMax, 0, 1));
-      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    const ph = clockMinAt(state.t);
+    if (ph != null && ph >= z0 && ph <= z1) {
+      const px = X(ph);
+      ctx.strokeStyle = 'rgba(230,237,243,.35)';
+      ctx.setLineDash([4, 4]);
+      line(ctx, px, padT, px, padT + plotH);
+      ctx.setLineDash([]);
     }
-    ctx.stroke();
+
+    // legend + axis note
+    let lx = padL;
+    for (const s of series) {
+      legendSwatch(ctx, lx, 10, s.p.color, s.p.label);
+      lx += 26 + ctx.measureText(s.p.label).width + 22;
+    }
+    ctx.fillStyle = COL.txt; ctx.font = '10px ' + FONT; ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText(met.note, w - padR, 10);
   }
 
   /* ===========================================================================
-   * 9) DECISIONS PANEL ("Warum?")
+   * 9) DECISIONS PANEL ("Warum?") — adaptive switch log + plan cards
    * ======================================================================== */
   function renderDecisions() {
+    renderDecView();
+  }
+
+  function renderDecView() {
+    const pol = state.decTab;
+    const adaptiveBox = $('dec-adaptive');
+    const planBox = $('dec-plan');
+    if (!adaptiveBox || !planBox) return;
+    const isAdaptive = pol === 'adaptive' || !state.summaries[pol];
+    adaptiveBox.hidden = !isAdaptive;
+    planBox.hidden = isAdaptive;
+    if (isAdaptive) {
+      renderDecisionList();
+      renderAdaptiveStats();
+    } else {
+      renderPlanCard(pol, planBox);
+    }
+  }
+
+  // right column beneath the pressure table: what the log says in aggregate
+  function renderAdaptiveStats() {
+    const box = $('adaptive-stats');
+    if (!box) return;
+    const decs = state.decisions || [];
+    if (!decs.length) { box.innerHTML = ''; return; }
+    box.title = 'Statistik über die protokollierten Wechsel (max. die ersten 200 des Laufs)';
+    const targets = {};
+    let earlyExit = 0;
+    for (const d of decs) {
+      const to = d.to || '–';
+      targets[to] = (targets[to] || 0) + 1;
+      if ((d.reason || '').indexOf('served out') >= 0) earlyExit++;
+    }
+    const top = Object.keys(targets).sort((a, b) => targets[b] - targets[a])[0];
+    const span = state.duration / 3600;
+    const rows = [
+      ['Phasenwechsel', fmt(decs.length, 0) + (span >= 1
+        ? ' · ' + fmt(decs.length / span, 1) + '/h' : '')],
+      ['Häufigstes Ziel', (PHASE_LABEL[top] || top) + ' (' + fmt(targets[top], 0) + '×)'],
+      ['Früh beendet (leere Phase)', fmt(earlyExit, 0) + '×'],
+      ['Ø Wartezeit beim Wechsel', (() => {
+          const waits = decs.map((d) => {
+            const m = /worst wait (\d+)/.exec(d.reason || '');
+            return m ? Number(m[1]) : null;
+          }).filter((v) => v != null);
+          return waits.length
+            ? fmt(waits.reduce((s, v) => s + v, 0) / waits.length, 0) + ' s' : '–';
+        })()],
+    ];
+    box.innerHTML = '<h3>Log in Zahlen</h3><table class="stats-table">' +
+      rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('') +
+      '</table>';
+  }
+
+  function renderDecisionList() {
     const list = $('decisions-list');
     list.innerHTML = '';
     const decs = state.decisions || [];
     if (!decs.length) {
-      list.innerHTML = '<li class="empty">Keine Phasenwechsel protokolliert.</li>';
+      const unsig = state.junction && state.junction.signalized === false;
+      list.innerHTML = unsig
+        ? '<li class="empty">Kreisverkehr: keine Ampel — Einfahrten sind yield-regelt.</li>'
+        : '<li class="empty">Keine Phasenwechsel protokolliert.</li>';
       renderPressureTable(null);
       return;
     }
@@ -1077,16 +1282,65 @@
       li.className = 'decision-item' + (i === state.selectedDecision ? ' active' : '');
       li.dataset.idx = String(i);
       li.innerHTML =
-        `<div class="head"><span class="t">${timeStr(d.t)}</span>` +
+        `<div class="head"><span class="t">${clockString(d.t) || timeStr(d.t)}</span>` +
         `<span class="swap">${d.from || '–'}<span class="arrow">→</span>${d.to || '–'}</span></div>` +
         `<div class="why">${escapeHtml(d.reason || '')}</div>`;
       li.addEventListener('click', () => {
         state.selectedDecision = i;
-        renderDecisions();
+        renderDecisionList();
       });
       list.appendChild(li);
     }
     renderPressureTable(decs[state.selectedDecision]);
+  }
+
+  // plan card for fixed / coordinated / tuned (from the engine's plan info)
+  function renderPlanCard(pol, box) {
+    const plan = state.plans[pol];
+    const phases = (state.result && state.result.phases) || [];
+    if (!plan) {
+      box.innerHTML = '<p class="empty">Keine Planinformationen für diese Strategie.</p>';
+      return;
+    }
+    let html = '';
+    if (pol === 'coordinated' && plan.main_axis) {
+      html += `<p class="plan-line"><b>Korridor-Takt</b> ${plan.cycle_s}s` +
+        (plan.target_cycle_s ? ` (Ziel ${plan.target_cycle_s}s)` : '') +
+        ` · Offset ${plan.offset_s}s · Hauptachse <b>${plan.main_axis}</b>` +
+        ` · Bias ×${plan.bias}</p>`;
+    }
+    if (plan.buckets) {
+      html += '<table class="plan-table"><thead><tr><th>Tageszeit</th><th>Zyklus</th><th>Stoßphase</th><th>Grün je Phase</th></tr></thead><tbody>' +
+        plan.buckets.map((b) => {
+          const ratios = b.flow_ratios || [];
+          const crit = ratios.length
+            ? ratios.indexOf(Math.max.apply(null, ratios)) : -1;
+          const critName = crit >= 0 && phases[crit] ? (PHASE_LABEL[phases[crit]] || phases[crit]) : '–';
+          return `<tr><td>${String(b.from_h).padStart(2, '0')}:00–${String(b.to_h).padStart(2, '0')}:00</td>` +
+            `<td>${b.cycle_s}s${b.y_total != null ? ' · Y=' + b.y_total : ''}</td>` +
+            `<td>${critName}</td>` +
+            `<td>${(b.greens || []).join(' / ')}s</td></tr>`;
+        }).join('') +
+        '</tbody></table>';
+      html += '<p class="plan-why"><b>Warum so?</b> Aus den Stopp-Linien-Zählungen jeder ' +
+        'Tageszeit wird die stärkste Stunde (Spitzenstunde) bestimmt. Daraus folgt je Phase ' +
+        'das Flussverhältnis y = Nachfrage / Kapazität; der Webster-Zyklus ' +
+        'C = (1,5·L + 5)/(1 − Y) und die Grünverteilung ∝ y ergeben sich direkt daraus — ' +
+        'die Stoßphase bekommt automatisch den größten Grünanteil. Ein eigener Plan je ' +
+        'Tageszeit, weil ein Plan, der zur Rush passt, um 14 Uhr nur verschwendetes Grün ' +
+        'produziert (und umgekehrt).</p>';
+    } else {
+      html += '<table class="plan-table"><thead><tr><th>Phase</th><th>Grün</th></tr></thead><tbody>' +
+        phases.map((ph, i) =>
+          `<tr><td>${PHASE_LABEL[ph] || ph}</td><td>${(plan.greens || [])[i] != null ? (plan.greens || [])[i] + 's' : '–'}</td></tr>`).join('') +
+        '</tbody></table>';
+      html += `<p class="plan-line">Zyklus <b>${plan.cycle_s}s</b>` +
+        (plan.y_total != null ? ' · Flussverhältnis Y=' + plan.y_total : '') +
+        (plan.offset_s != null && !plan.main_axis ? ' · Offset ' + plan.offset_s + 's' : '') +
+        '</p>';
+    }
+    html += `<p class="plan-src">${escapeHtml(plan.source || '')}</p>`;
+    box.innerHTML = html;
   }
 
   function renderPressureTable(dec) {
@@ -1123,17 +1377,94 @@
    *    Initialised with junction context in bindEvents(); see SFAsk.init.
    * ======================================================================== */
 
+  // Locally computed answers for suggested questions — honest numbers straight
+  // from the frames on screen, no LLM round trip. Returns null → API request.
+  function computeLocalAnswer(q) {
+    const ql = q.toLowerCase();
+    // Stoßzeit-Frage: vergleicht mittlere Warteschlangen in den Spitzenfenstern
+    if (/stoßzeit|stosszeit|spitze|durchschnitt/.test(ql) && /tuned|adaptiv/.test(ql)) {
+      const pols = ['fixed', 'adaptive', 'coordinated', 'tuned']
+        .filter((k) => (state.framesBy[k] || []).length && state.summaries[k]);
+      if (pols.length < 2 || clockMinAt(0) == null) return null;
+      const rush = [[420, 540], [960, 1080]];           // 07:00–09:00, 16:00–18:00
+      const w0 = clockMinAt(0) || 0;
+      const w1 = clockMinAt(state.duration) != null ? clockMinAt(state.duration) : 1440;
+      const active = rush.filter(([a, b]) => Math.max(a, w0) < Math.min(b, w1));
+      if (!active.length) {
+        return { answer: 'Das aktuelle Zeitfenster (' + minToLabel(w0) + '–' +
+          minToLabel(w1) + ' Uhr) enthält keine Stoßzeitfenster. Wähle z. B. ' +
+          'Berufsverkehr 07–18 Uhr, dann vergleiche ich die Spitzen.', source: 'Analyse · lokal' };
+      }
+      const isPeak = (m) => active.some(([a, b]) => m >= a && m < b);
+      const avgQ = (pol, fn) => {
+        let sum = 0, n = 0;
+        for (const f of state.framesBy[pol]) {
+          const m = clockMinAt(f.t || 0);
+          if (m == null || !fn(m)) continue;
+          sum += Object.keys(f.q || {}).reduce((s, k) => s + (f.q[k] || 0), 0);
+          n++;
+        }
+        return n ? sum / n : 0;
+      };
+      const stats = {};
+      for (const pol of pols) {
+        stats[pol] = {
+          peak: avgQ(pol, isPeak),
+          off: avgQ(pol, (m) => !isPeak(m)),
+          delay: (state.summaries[pol] || {}).avg_delay_s,
+        };
+      }
+      const label = { fixed: 'Fixed', adaptive: 'Adaptiv', coordinated: 'Koord.', tuned: 'Tuned' };
+      const fmtV = (v) => fmt(v, 1).replace(',0', '');
+      const rushTxt = active.map(([a, b]) => minToLabel(a) + '–' + minToLabel(b)).join(' & ');
+      const peakRank = pols.slice().sort((a, b) => stats[a].peak - stats[b].peak);
+      const avgRank = pols.slice().sort((a, b) => stats[a].delay - stats[b].delay);
+      const lines = [
+        'Tagesdurchschnitt (Ø Verzögerung): ' +
+          avgRank.map((k) => label[k] + ' ' + fmt(stats[k].delay, 1) + ' s').join(', ') +
+          ' — vorn liegt ' + label[avgRank[0]] + '.',
+        'Stoßzeitfenster (' + rushTxt + ' Uhr, mittlere Warteschlange): ' +
+          peakRank.map((k) => label[k] + ' ' + fmtV(stats[k].peak) + ' veh').join(', ') +
+          ' — vorn liegt ' + label[peakRank[0]] + '.',
+        'Nebenzeiten (mittlere Warteschlange): ' +
+          pols.map((k) => label[k] + ' ' + fmtV(stats[k].off) + ' veh').join(', ') + '.',
+      ];
+      if (peakRank[0] !== 'adaptive') {
+        lines.push('Die These stimmt also für diesen Lauf: zur Spitze hält ' +
+          label[peakRank[0]] + ' die kürzesten Schlangen (sein Webster-Plan ist auf die ' +
+          'Spitzenstunde dimensioniert), im Tagesmittel gewinnt trotzdem ' +
+          label[avgRank[0]] + ', weil max-pressure die Nebenzeiten besser bedient.');
+      } else {
+        lines.push('In diesem Lauf gewinnt Adaptiv sogar zur Spitze — hysteresefreies ' +
+          'Umschalten zahlt sich hier stärker aus als der auf die Spitzenstunde ' +
+          'getunte feste Plan.');
+      }
+      return { answer: lines.join('\n'), source: 'Analyse · lokal aus Frames berechnet' };
+    }
+    if (/grüne welle|gruenen welle|koord/.test(ql)) {
+      return { answer:
+        'Die grüne Welle (Koord.) ist ein Korridor-Plan: fester 90-s-Takt, Versatz-Offset, ' +
+        'Grünanteile zugunsten der Hauptachse. An dieser einzelnen Kreuzung liegt sie deshalb ' +
+        'nahe an Fixed — ihr Vorteil entsteht erst mit Nachbarn, weil Fahrzeuge in Pulks ' +
+        'ankommen. Öffne die Netzwerk-Simulation: dort gewinnt Koord. auf dem Korridor deutlich.',
+        source: 'Hintergrund · lokal' };
+    }
+    return null;
+  }
+
   // Speak a concise summary of the current result (junction phrasing; the
   // network page injects its own). Fed to SFAsk for "Ergebnis vorlesen".
   function buildResultSentence() {
-    const r = state.result;
-    if (!r || !r.summary || !r.summary.fixed || !r.summary.adaptive) return '';
-    const f = r.summary.fixed, a = r.summary.adaptive, i = r.improvement || {};
-    const sc = (state.baseConfig && state.baseConfig.demand_scenario) || 'normal';
-    return 'SignalFlow, Szenario ' + sc + '. Feste Steuerung: ' +
-      fmt(f.avg_delay_s, 1) + ' Sekunden Verzögerung je Fahrzeug. Adaptive Steuerung: ' +
-      fmt(a.avg_delay_s, 1) + ' Sekunden, also ' + fmt(i.avg_delay_pct != null ? i.avg_delay_pct : 0, 1) +
-      ' Prozent weniger. Durchsatz ' + fmt(a.throughput_vph, 0) + ' Fahrzeuge pro Stunde.';
+    const s = state.summaries || {};
+    if (!s.fixed || !s.adaptive) return '';
+    const parts = [
+      'Fixed: ' + fmt(s.fixed.avg_delay_s, 1) + ' Sekunden Verzögerung je Fahrzeug.',
+      'Adaptiv: ' + fmt(s.adaptive.avg_delay_s, 1) + ' Sekunden.',
+    ];
+    if (s.coordinated) parts.push('Koordiniert: ' + fmt(s.coordinated.avg_delay_s, 1) + ' Sekunden.');
+    if (s.tuned) parts.push('Tuned: ' + fmt(s.tuned.avg_delay_s, 1) + ' Sekunden.');
+    parts.push('Durchsatz adaptiv: ' + fmt(s.adaptive.throughput_vph, 0) + ' Fahrzeuge pro Stunde.');
+    return 'SignalFlow. ' + parts.join(' ');
   }
 
   /* ===========================================================================
@@ -1181,11 +1512,13 @@
     if (state.playing && state.result) {
       state.t += dt * state.speed;
       if (state.t >= state.duration) { state.t = state.duration; setPlaying(false); }
-      // advance vehicles driving through the junction
+      // advance vehicles driving through the junction (per strategy)
       const rate = (dt * state.speed) / Math.max(1, state.frameDt * 0.9);
-      if (state.crossing.length) {
-        state.crossing.forEach((c) => { c.p += rate; });
-        state.crossing = state.crossing.filter((c) => c.p < 1);
+      for (const k in state.crossingBy) {
+        const arr = state.crossingBy[k];
+        if (!arr.length) continue;
+        for (const c of arr) c.p += rate;
+        state.crossingBy[k] = arr.filter((c) => c.p < 1);
       }
     }
     updateProgress();
@@ -1198,25 +1531,25 @@
    * 12) CONFIG CONTROLS
    * ======================================================================== */
   function bindControls() {
-    const dur = $('ctl-duration'), load = $('ctl-load'), seed = $('ctl-seed');
+    const load = $('ctl-load'), seed = $('ctl-seed');
     const source = document.getElementById('ctl-source');
 
     const sync = () => {
-      $('val-duration').textContent = dur.value;
       $('val-load').textContent = Number(load.value).toFixed(2);
       $('val-seed').textContent = seed.value;
-      [dur, load, seed].forEach(setRangeFill);
+      [load, seed].forEach(setRangeFill);
     };
-    [dur, load, seed].forEach((el) => el.addEventListener('input', sync));
+    [load, seed].forEach((el) => el.addEventListener('input', sync));
     sync();
 
     let timer = null;
     const schedule = () => { clearTimeout(timer); timer = setTimeout(runSimulation, 300); };
-    dur.addEventListener('input', schedule);
     load.addEventListener('input', schedule);
     seed.addEventListener('input', schedule);
     if (source) source.addEventListener('change', runSimulation);
-    ['ctl-scenario', 'ctl-mix', 'ctl-tsp', 'ctl-junction'].forEach(function (id) {
+    const scen = document.getElementById('ctl-scenario');
+    if (scen) scen.addEventListener('change', applyScenarioPreset);
+    ['ctl-mix', 'ctl-tsp', 'ctl-junction'].forEach(function (id) {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', runSimulation);
     });
@@ -1254,6 +1587,19 @@
     return k - 1;
   }
 
+  // clock-based demand shapes (mirror of the Python CLOCK_PROFILES)
+  function circG(h, mu, sig) {
+    const d = Math.abs(h - mu);
+    return Math.exp(-0.5 * Math.pow(Math.min(d, 24 - d) / sig, 2));
+  }
+  const DEMO_CLOCK_PROFILES = {
+    commute: (h) => 0.05 + 0.57 * circG(h, 8, 0.85) + 0.50 * circG(h, 17.5, 0.95),
+    peak: (h) => 0.10 + 0.28 * circG(h, 8, 1.4) + 0.48 * circG(h, 13.2, 2.8) + 0.33 * circG(h, 17.6, 1.5),
+    leisure: (h) => 0.08 + 0.70 * circG(h, 14.2, 2.3),
+    flat: (h) => 0.55 + 0.25 * circG(h, 13.5, 4.5),
+  };
+  const SCENARIO_PROFILE = { normal: 'peak', berufsverkehr: 'commute', ferien: 'flat', freizeit: 'leisure' };
+
   function runDemo(cfg) {
     const steps = Math.max(60, (cfg.duration_min || 30) * 60);
     const sampleDt = 4;
@@ -1261,10 +1607,15 @@
     const svc = {};
     for (const m of MOVE_KEYS) { const turn = m.split('-')[1]; svc[m] = (lanes[turn] || 1) * 1800 / 3600; }
 
+    const fromS = cfg.time_from || null;
+    const profName = SCENARIO_PROFILE[cfg.demand_scenario] || 'peak';
+    const fromMin = fromS ? fromS.split(':').reduce((a, x) => a * 60 + Number(x), 0) : 0;
+
     const rng = mulberry32(cfg.seed || 1);
     const arrivals = [];
     for (let t = 0; t < steps; t++) {
-      const mult = cfg.demand_profile === 'flat' ? 1
+      const mult = fromS
+        ? DEMO_CLOCK_PROFILES[profName](((fromMin + t) % 1440) / 60)
         : 0.6 + 1.0 * Math.sin(Math.PI * t / (steps - 1));
       const row = {};
       for (const a of APPROACHES) for (const mv of TURNS) {
@@ -1274,16 +1625,16 @@
       arrivals.push(row);
     }
 
-    // ---- fixed-time plan ----
-    const fixedGreens = cfg.fixed_greens || [36, 10, 32, 8];
-    const plan = [];
-    PHASE_ORDER.forEach((ph, i) => {
-      plan.push({ phase: ph, kind: 'green', dur: fixedGreens[i] || 20 });
-      plan.push({ phase: ph, kind: 'yellow', dur: 3 });
-      plan.push({ phase: ph, kind: 'all_red', dur: 1 });
-    });
-
-    function policyFixed() {
+    function planFor(greens) {
+      const plan = [];
+      PHASE_ORDER.forEach((ph, i) => {
+        plan.push({ phase: ph, kind: 'green', dur: greens[i] || 20 });
+        plan.push({ phase: ph, kind: 'yellow', dur: 3 });
+        plan.push({ phase: ph, kind: 'all_red', dur: 1 });
+      });
+      return plan;
+    }
+    function policyPlan(plan) {
       let pos = 0, remaining = plan[0].dur;
       return function (t) {
         const cur = plan[pos];
@@ -1293,6 +1644,41 @@
         return dec;
       };
     }
+
+    // ---- fixed-time plan ----
+    const fixedGreens = cfg.fixed_greens || [36, 10, 32, 8];
+
+    // ---- coordinated: 90 s corridor cycle, bias toward the busier axis ----
+    const demOf = (m) => ((cfg.demand[m.split('-')[0]] || {})[m.split('-')[1]]) || 0;
+    const axisOf = (ph) => (PHASE_MOVES[ph][0][0] === 'N' || PHASE_MOVES[ph][0][0] === 'S') ? 'NS' : 'EW';
+    const axisSum = (ax) => PHASE_ORDER.reduce((s2, ph) =>
+      axisOf(ph) === ax ? s2 + PHASE_MOVES[ph].reduce((s3, m) => s3 + demOf(m), 0) : s2, 0);
+    const mainAxis = axisSum('NS') >= axisSum('EW') ? 'NS' : 'EW';
+    const coordLost = PHASE_ORDER.length * 4;
+    const coordAvail = Math.max(PHASE_ORDER.length * 7, 90 - coordLost);
+    const coordDem = PHASE_ORDER.map((ph) =>
+      PHASE_MOVES[ph].reduce((s2, m) => s2 + demOf(m), 0) *
+      (axisOf(ph) === mainAxis ? 1.25 : 0.8));
+    const coordTot = coordDem.reduce((a2, b2) => a2 + b2, 0) || 1;
+    const coordGreens = PHASE_ORDER.map((_, i) =>
+      Math.max(7, Math.round(coordAvail * coordDem[i] / coordTot)));
+
+    // ---- tuned: Webster splits from the demand counts (demo shortcut) ----
+    const crit = PHASE_ORDER.map((ph) => Math.max.apply(null, PHASE_MOVES[ph].map(
+      (m) => demOf(m) / Math.max(1, lanes[m.split('-')[1]] || 1)))) / 1800;
+    const Y = crit.reduce((a2, b2) => a2 + b2, 0);
+    const tunedLost = PHASE_ORDER.length * 4;
+    const tunedCycle = Y > 0.01
+      ? Math.round(Math.min(150, Math.max(40, (1.5 * tunedLost + 5) / (1 - Math.min(0.95, Y)))))
+      : 60;
+    const tunedAvail = Math.max(PHASE_ORDER.length * 6, tunedCycle - tunedLost);
+    const critTot = crit.reduce((a2, b2) => a2 + b2, 0) || 1;
+    const tunedGreens = PHASE_ORDER.map((_, i) =>
+      Math.max(6, Math.round(tunedAvail * crit[i] / critTot)));
+
+    const fixedPlan = planFor(fixedGreens);
+    const coordPlan = planFor(coordGreens);
+    const tunedPlan = planFor(tunedGreens);
 
     const minG = cfg.min_green || 24, maxG = cfg.max_green || 50;
     function policyAdaptive() {
@@ -1374,13 +1760,15 @@
       };
     }
 
-    const f = runOne(policyFixed());
+    const f = runOne(policyPlan(fixedPlan));
     const a = runOne(policyAdaptive());
+    const co = runOne(policyPlan(coordPlan));
+    const tu = runOne(policyPlan(tunedPlan));
     const fs = f.summary, as = a.summary;
     const red = (b, n) => b ? Math.round((b - n) / b * 1000) / 10 : 0;
     return {
       config: cfg, phases: PHASE_ORDER,
-      summary: { fixed: fs, adaptive: as },
+      summary: { fixed: fs, adaptive: as, coordinated: co.summary, tuned: tu.summary },
       improvement: {
         avg_delay_pct: red(fs.avg_delay_s, as.avg_delay_s),
         throughput_pct: fs.throughput_vph ? Math.round((as.throughput_vph - fs.throughput_vph) / fs.throughput_vph * 1000) / 10 : 0,
@@ -1388,15 +1776,41 @@
         co2_pct: red(fs.co2_g, as.co2_g),
         wasted_green_pct: red(fs.wasted_green_s, as.wasted_green_s),
       },
-      fixed: { frames: f.frames },
+      fixed: { frames: f.frames, plan: { cycle_s: fixedGreens.reduce((x, y) => x + y, 0) + 16,
+                                          greens: fixedGreens, source: 'fester Tagesplan (Offline-Demo)' } },
       adaptive: { frames: a.frames, decisions: a.decisions.slice(0, 200) },
-      meta: { steps, frame_dt: sampleDt, generated: 'SignalFlow demo (offline)' },
+      coordinated: { frames: co.frames, plan: { cycle_s: coordGreens.reduce((x, y) => x + y, 0) + coordLost,
+                                                target_cycle_s: 90, offset_s: 12, main_axis: mainAxis,
+                                                bias: 1.25, greens: coordGreens,
+                                                source: 'Korridor-Takt 90s (Offline-Demo)' } },
+      tuned: { frames: tu.frames, plan: { cycle_s: tunedGreens.reduce((x, y) => x + y, 0) + tunedLost,
+                                          greens: tunedGreens, y_total: Math.round(Y * 1000) / 1000,
+                                          source: 'Webster-Splits aus Zählungen (Offline-Demo)' } },
+      meta: { steps, frame_dt: sampleDt, generated: 'SignalFlow demo (offline)',
+              time_from: cfg.time_from, time_to: cfg.time_to, warmup_min: 0,
+              clock: !!fromS },
     };
   }
 
   /* ===========================================================================
    * 15) EVENT WIRING + INIT
    * ======================================================================== */
+  // reflect visibility/availability on the strategy toggle buttons
+  function syncPolicyButtons() {
+    document.querySelectorAll('.policy-modes .pol-btn').forEach((b) => {
+      const pol = b.dataset.pol;
+      if (pol === 'all') {
+        b.classList.toggle('active',
+          state.availablePolicies.length > 0 &&
+          state.availablePolicies.every((k) => state.visible[k]));
+        return;
+      }
+      const avail = state.availablePolicies.indexOf(pol) >= 0;
+      b.disabled = !avail;
+      b.classList.toggle('active', avail && !!state.visible[pol]);
+      b.title = avail ? b.title : 'Für den Kreisverkehr-Vergleich nicht vorhanden';
+    });
+  }
   // dark ⇄ light theme (persisted; canvases stay dark "monitors")
   function initTheme() {
     const btn = $('btn-theme');
@@ -1413,59 +1827,55 @@
     apply(t);
   }
 
-  // Tageszeit-Fenster: wählt Szenario + Last automatisch (Mo–Fr Stoßzeiten =
-  // Berufsverkehr, Wochenende Mittagshügel = Freizeit, nachts weniger, Ferien −30 %).
-  // Manuelle Auswahl bleibt möglich — das Fenster überschreibt nur bei Änderung.
-  function applyTimeWindow() {
-    const dow = $('ctl-dow').value;
-    const fromS = $('ctl-time-from').value || '07:30';
-    const toS = $('ctl-time-to').value || '08:30';
-    const holiday = $('ctl-holiday').checked;
-    const min = (s) => { const [h, m] = s.split(':').map(Number); return h * 60 + m; };
-    const a = min(fromS), b = Math.max(min(toS), min(toS) + (min(toS) <= a ? 24 * 60 : 0));
-    const mid = (a + b) / 2;
-    const overlaps = (s, e) => a < e && b > s;
-    let scen = 'normal', mult = 1.0, tag = '';
-    if (dow === 'wd') {
-      if (overlaps(360, 540) || overlaps(930, 1110)) { scen = 'berufsverkehr'; tag = 'Stoßzeit'; }
-      else if (mid >= 1320 || mid < 360) { mult = 0.5; tag = 'Nacht'; }
-      else { mult = 0.9; tag = 'Tagesverkehr'; }
-    } else {
-      scen = 'freizeit';
-      if (mid >= 600 && mid <= 960) { tag = 'Mittagshügel'; }
-      else { mult = 0.7; tag = 'Randzeit'; }
-    }
-    if (holiday) { mult *= 0.7; tag += ' · Ferien'; }
-    mult = clamp(Math.round(mult * 100) / 100, 0.5, 1.4);
+  // Szenario ⇒ typisches Zeitfenster (Typntag). Das Fenster bleibt frei
+  // anpassbar; die Nachfrage folgt dann der echten Uhrzeit im Fenster.
+  const SCENARIO_WINDOWS = {
+    normal:        { dow: 'wd', from: '06:00', to: '22:00', holiday: false },
+    berufsverkehr: { dow: 'wd', from: '07:00', to: '18:00', holiday: false },
+    ferien:        { dow: 'wd', from: '09:00', to: '19:00', holiday: true },
+    freizeit:      { dow: 'sa', from: '09:00', to: '21:00', holiday: false },
+  };
 
-    const scenSel = $('ctl-scenario');
-    if (scenSel) {
-      scenSel.value = scen;
-      scenSel.dispatchEvent(new Event('change', { bubbles: true }));
-      document.querySelectorAll('.preset').forEach((p) =>
-        p.classList.toggle('active', p.dataset.scenario === scen));
-    }
-    const load = $('ctl-load');
-    if (load) {
-      load.value = String(mult);
-      load.dispatchEvent(new Event('input', { bubbles: true }));
-    }
+  function applyScenarioPreset() {
+    presetWindow();
+    updateTimeHint();
+    runSimulation();
+  }
+
+  // set the window inputs from the scenario without triggering a run
+  function presetWindow() {
+    const sel = $('ctl-scenario');
+    const w = SCENARIO_WINDOWS[sel ? sel.value : 'normal'] || SCENARIO_WINDOWS.normal;
+    if ($('ctl-dow')) $('ctl-dow').value = w.dow;
+    if ($('ctl-time-from')) $('ctl-time-from').value = w.from;
+    if ($('ctl-time-to')) $('ctl-time-to').value = w.to;
+    if ($('ctl-holiday')) $('ctl-holiday').checked = w.holiday;
+  }
+
+  function updateTimeHint() {
+    const fromS = ($('ctl-time-from') && $('ctl-time-from').value) || '07:00';
+    const toS = ($('ctl-time-to') && $('ctl-time-to').value) || '18:00';
+    const span = spanMinutes(fromS, toS);
+    const dow = ($('ctl-dow') && $('ctl-dow').value) || 'wd';
+    const holiday = $('ctl-holiday') && $('ctl-holiday').checked;
     const hint = $('time-hint');
     if (hint) {
-      const labels = { normal: 'Normal', berufsverkehr: 'Berufsverkehr', ferien: 'Ferien', freizeit: 'Freizeit' };
-      hint.textContent = (dow === 'wd' ? 'Mo–Fr' : (dow === 'sa' ? 'Sa' : 'So')) + ' ' +
-        fromS + '–' + toS + ' → ' + (labels[scen] || scen) + ' · Last ×' +
-        mult.toFixed(2).replace('.', ',') + (tag ? ' (' + tag + ')' : '');
+      const dowl = { wd: 'Mo–Fr', sa: 'Sa', so: 'So' }[dow] || '';
+      hint.textContent = dowl + ' ' + fromS + '–' + toS + ' = ' +
+        (span >= 120 ? Math.round(span / 6) / 10 + ' h' : span + ' min') +
+        ' Simulation · Nachfrage folgt der Uhrzeit' +
+        (holiday ? ' · Ferien (−30 %)' : '');
     }
-    runSimulation();
   }
 
   function initTimeWindow() {
     const ids = ['ctl-dow', 'ctl-time-from', 'ctl-time-to', 'ctl-holiday'];
     ids.forEach((id) => {
       const el = $(id);
-      if (el) el.addEventListener('change', applyTimeWindow);
+      if (el) el.addEventListener('change', () => { updateTimeHint(); runSimulation(); });
     });
+    presetWindow();           // Fenster passend zum Start-Szenario (kein Auto-Run)
+    updateTimeHint();
   }
 
   function bindEvents() {
@@ -1488,13 +1898,66 @@
       });
     });
 
-    // viewer mode only — .ask-mode buttons belong to the ask panel (ask.js)
-    const viewerModeBtns = document.querySelectorAll('.modes:not(.ask-mode) .mode-btn');
-    viewerModeBtns.forEach((b) => {
+    // strategy toggles: show/hide each controller's canvas, "Alle" = all on
+    document.querySelectorAll('.policy-modes .pol-btn').forEach((b) => {
       b.addEventListener('click', () => {
-        state.mode = b.dataset.mode;
-        viewerModeBtns.forEach((x) => x.classList.toggle('active', x === b));
+        const pol = b.dataset.pol;
+        if (pol === 'all') {
+          for (const p of POLICY_META) {
+            if (state.availablePolicies.indexOf(p.key) >= 0) state.visible[p.key] = true;
+          }
+        } else {
+          state.visible[pol] = !state.visible[pol];
+          if (!POLICY_META.some((p) => state.visible[p.key])) state.visible[pol] = true;
+        }
+        syncPolicyButtons();
       });
+    });
+
+    // decision-log tabs (adaptive switch log vs. the other strategies' plans)
+    document.querySelectorAll('.dec-tab').forEach((b) => {
+      b.addEventListener('click', () => {
+        state.decTab = b.dataset.dec;
+        document.querySelectorAll('.dec-tab').forEach((x) =>
+          x.classList.toggle('active', x === b));
+        renderDecView();
+      });
+    });
+
+    // time-series chart: metric chips + von–bis zoom
+    document.querySelectorAll('.chart-metrics .met-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        state.chartMetric = b.dataset.met;
+        document.querySelectorAll('.chart-metrics .met-btn').forEach((x) =>
+          x.classList.toggle('active', x === b));
+        renderCharts();
+      });
+    });
+    const applyZoom = () => {
+      const toMin = (s) => {
+        if (!s) return null;
+        const p = s.split(':').map(Number);
+        return (p[0] || 0) * 60 + (p[1] || 0);
+      };
+      const a = toMin($('zoom-from') && $('zoom-from').value);
+      const b2 = toMin($('zoom-to') && $('zoom-to').value);
+      if (a == null || b2 == null || a === b2) state.zoom = null;
+      else state.zoom = { from: a, to: b2 };
+      renderCharts();
+    };
+    ['zoom-from', 'zoom-to'].forEach((id) => {
+      const el = $(id);
+      if (el) el.addEventListener('change', applyZoom);
+    });
+    const zr = $('zoom-reset');
+    if (zr) zr.addEventListener('click', () => {
+      state.zoom = null;
+      const res = state.result;
+      if (res && res.meta && res.meta.time_from) {
+        if ($('zoom-from')) $('zoom-from').value = res.meta.time_from;
+        if ($('zoom-to')) $('zoom-to').value = res.meta.time_to || res.meta.time_from;
+      }
+      renderCharts();
     });
 
     const prog = $('progress');
@@ -1508,22 +1971,20 @@
       apiFetch: apiFetch,
       context: function () { return { kind: 'junction' }; },
       resultSentence: buildResultSentence,
+      computeAnswer: computeLocalAnswer,
+      suggestions: [
+        'Warum gewinnt Adaptiv im Durchschnitt, verliert aber zur Stoßzeit gegen Tuned?',
+        'Wo sieht man die grüne Welle?',
+        'Was passiert in den Ferien mit 15 % Lkw?',
+      ],
     });
     if ($('btn-speak-result')) $('btn-speak-result').addEventListener('click', () => SFAsk.speakResult());
 
-    // scenario presets (one click)
-    document.querySelectorAll('.preset').forEach((b) => {
-      b.addEventListener('click', () => {
-        const sel = document.getElementById('ctl-scenario');
-        if (sel) sel.value = b.dataset.scenario || 'normal';
-        document.querySelectorAll('.preset').forEach((x) => x.classList.toggle('active', x === b));
-        runSimulation();
-      });
-    });
-
-    // export the intersection view as PNG
+    // export the first visible intersection view as PNG
     if ($('btn-export')) $('btn-export').addEventListener('click', () => {
-      exportCanvas('canvas-main', 'signalflow-kreuzung.png');
+      const vis = visiblePolicies();
+      const key = vis.length ? vis[0].key : 'fixed';
+      exportCanvas('canvas-' + key, 'signalflow-kreuzung-' + key + '.png');
     });
 
     // auto-speak toggle

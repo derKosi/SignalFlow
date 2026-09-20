@@ -1,12 +1,22 @@
 """SignalFlow simulation core.
 
 A deterministic discrete-time (dt = 1 s) queueing model of a single signalised
-4-way intersection with protected left turns. Two controllers compete on the
+4-way intersection with protected left turns. Four controllers compete on the
 *identical* arrival stream:
 
-* ``FixedTimeController``  — classic time-of-day plan (baseline)
-* ``MaxPressureController``— adaptive, queue-pressure driven, with an
-  explainability hook that records *why* every phase switch happened.
+* ``FixedTimeController``    — classic time-of-day plan (baseline)
+* ``MaxPressureController``  — adaptive, queue-pressure driven, with an
+  explainability hook that records *why* every phase switch happened
+* ``CoordinatedController``  — green wave: locked to a corridor master cycle
+  with splits biased toward the busier axis (honest about being ~fixed at an
+  isolated junction — progression gains need neighbours)
+* ``TunedController``        — Webster plan derived from stop-line detector
+  counts (the junction-level twin of the network model's ``fixed_tuned_est``)
+
+Demand follows a wall-clock time window (``time_from``/``time_to``): the
+within-day profile is evaluated at the simulated clock time, so a 07:00–18:00
+window reproduces both commute waves. A warm-up period (``warmup_min``) runs
+before the recorded window so KPIs start "in traffic", not from empty queues.
 
 The model is intentionally lightweight so it runs in milliseconds and can be
 replayed frame-by-frame in a browser dashboard. It is honest about being a
@@ -79,12 +89,10 @@ def _gauss(x: float, mu: float, sig: float) -> float:
 
 
 def profile_value(profile: str, t: int, steps: int) -> float:
-    """Within-day demand shape in [~0.1, ~1.8].
+    """Within-day demand shape in [~0.1, ~1.8] (legacy: stretched over the run).
 
-    * ``peak``     one mid-run hump (generic busy day)
-    * ``commute``  two humps (morning + evening rush) — Berufsverkehr
-    * ``leisure``  broad midday hump — weekend / Freizeit
-    * ``flat``     constant (holidays: demand exists but no sharp rush)
+    Only used when no wall-clock window is configured. With ``time_from`` set,
+    :func:`profile_at_clock` evaluates the same shapes at the real clock time.
     """
     n = max(1, steps - 1)
     x = t / n
@@ -96,6 +104,74 @@ def profile_value(profile: str, t: int, steps: int) -> float:
         return 0.35 + 0.85 * _gauss(x, 0.55, 0.20)
     # default: single hump
     return 0.6 + 1.0 * math.sin(math.pi * x)
+
+
+def parse_hhmm(s) -> int | None:
+    """Parse ``"HH:MM"`` (or ``"HH:MM:SS"``) into seconds-of-day, else None."""
+    if not isinstance(s, str) or ":" not in s:
+        return None
+    try:
+        parts = [int(p) for p in s.strip().split(":")]
+        h, m = parts[0], parts[1]
+        sec = parts[2] if len(parts) > 2 else 0
+    except (ValueError, TypeError):
+        return None
+    if not (0 <= h <= 24 and 0 <= m < 60 and 0 <= sec < 60):
+        return None
+    return min(86400, h * 3600 + m * 60 + sec)
+
+
+def _circ_gauss(h: float, mu: float, sig: float) -> float:
+    """Gaussian over the 24 h clock (wraparound, so night windows work)."""
+    d = abs(h - mu)
+    d = min(d, 24.0 - d)
+    return math.exp(-0.5 * (d / sig) ** 2)
+
+
+def _int_split(vals: list[float], total: float, floor: float = 0.0) -> list[int]:
+    """Largest-remainder rounding: integers that sum exactly to ``total``."""
+    base = [int(v) for v in vals]
+    rem = int(round(total)) - sum(base)
+    order = sorted(range(len(vals)), key=lambda i: vals[i] - base[i], reverse=rem > 0)
+    k = 0
+    while rem != 0 and order and k < 4 * len(vals) + 8:
+        i = order[k % len(order)]
+        if rem > 0:
+            base[i] += 1
+            rem -= 1
+        elif base[i] > max(1, floor):
+            base[i] -= 1
+            rem += 1
+        k += 1
+    return base
+
+
+# Clock-based within-day shapes (hour-of-day -> multiplier). Peaks are
+# calibrated so a rush window sits just below junction capacity (~v/c 0.85–0.9):
+# sustained hours of oversaturation would collapse the whole day, which no
+# real-world coordinated plan has to survive either.
+CLOCK_PROFILES = {
+    # Berufsverkehr: morning + evening commute waves, empty midday valley
+    "commute": lambda h: 0.05 + 0.57 * _circ_gauss(h, 8.0, 0.85)
+                         + 0.50 * _circ_gauss(h, 17.5, 0.95),
+    # Normal workday: moderate shoulders, one broad midday peak
+    "peak": lambda h: 0.10 + 0.28 * _circ_gauss(h, 8.0, 1.4)
+                      + 0.48 * _circ_gauss(h, 13.2, 2.8)
+                      + 0.33 * _circ_gauss(h, 17.6, 1.5),
+    # Weekend/Freizeit: one broad midday hill, quiet morning
+    "leisure": lambda h: 0.08 + 0.70 * _circ_gauss(h, 14.2, 2.3),
+    # Ferien: demand exists all day, no sharp rush, quieter night
+    "flat": lambda h: 0.55 + 0.25 * _circ_gauss(h, 13.5, 4.5),
+}
+
+
+def profile_at_clock(profile: str, sec_of_day: float) -> float:
+    """Within-day demand shape evaluated at a wall-clock second-of-day."""
+    h = (sec_of_day % 86400) / 3600.0
+    fn = CLOCK_PROFILES.get(profile)
+    if fn is None:
+        fn = CLOCK_PROFILES["peak"]
+    return round(fn(h), 4)
 
 
 @dataclass
@@ -113,6 +189,11 @@ class Config:
     co2_idle_g_per_s: float = 1.15        # idling emission proxy
     # season / day-type demand scenario (shape + base multiplier)
     demand_scenario: str = "normal"        # normal|berufsverkehr|ferien|freizeit|custom
+    # wall-clock window ("HH:MM") — demand follows the real clock inside it.
+    # duration_min should equal the window span (the dashboards send it that way).
+    time_from: str | None = None
+    time_to: str | None = None
+    warmup_min: int = 0                   # simulated before 'from' without KPI counting
     # heterogeneous traffic: vehicle-class shares (values need not sum to 1)
     vehicle_mix: dict = field(default_factory=lambda: {"car": 1.0})
     # bus-actuated signal priority (transit signal priority, TSP)
@@ -135,10 +216,36 @@ class Config:
     starve_seconds: int = 120        # waiting this long forces a service bonus
     switch_hysteresis: float = 3.0   # pressure must beat current by this factor
     empty_exit_green: int = 5        # allow leaving an empty phase after this long
+    # coordinated (green wave) plan: corridor master cycle / progression offset
+    coord_cycle_s: int = 90
+    coord_offset_s: int = 12
+    coord_bias: float = 1.25         # green-share bias toward the busier axis
 
     @property
     def steps(self) -> int:
         return int(self.duration_min * 60)
+
+    @property
+    def total_steps(self) -> int:
+        """Simulated seconds including the un-recorded warm-up."""
+        return self.steps + int(self.warmup_min) * 60
+
+    @property
+    def from_sec(self) -> int | None:
+        return parse_hhmm(self.time_from)
+
+    @property
+    def to_sec(self) -> int | None:
+        return parse_hhmm(self.time_to)
+
+    @property
+    def has_window(self) -> bool:
+        return self.from_sec is not None
+
+    def clock_at(self, t: int) -> int:
+        """Wall-clock second-of-day at simulation second ``t`` (t=0 is 'from')."""
+        f = self.from_sec or 0
+        return (f + int(t)) % 86400
 
     @property
     def scenario(self) -> dict:
@@ -213,7 +320,14 @@ class Config:
         return float(self.demand[approach][turn])
 
     def profile_multiplier(self, t: int) -> float:
-        """Demand shape over time, from the active scenario/profile."""
+        """Demand shape over time.
+
+        With a wall-clock window the within-day shape is evaluated at the real
+        clock time (so a 07:00–18:00 run shows both commute waves); without one
+        the legacy behaviour stretches the shape over the run length.
+        """
+        if self.has_window:
+            return profile_at_clock(self.profile_name(), self.clock_at(t))
         return profile_value(self.profile_name(), t, self.steps)
 
     @classmethod
@@ -241,6 +355,15 @@ class Config:
         # An explicit demand_profile implies the legacy custom profile.
         if "demand_profile" in d and "demand_scenario" not in d:
             cfg.demand_scenario = "custom"
+        # A wall-clock window implies its span as the simulated duration
+        # (callers may still pin duration_min explicitly).
+        if cfg.time_from is not None and "duration_min" not in d:
+            f_s = parse_hhmm(cfg.time_from) or 0
+            t_s = parse_hhmm(cfg.time_to)
+            if t_s is not None:
+                span = (t_s - f_s) % 86400
+                if span >= 60:
+                    cfg.duration_min = min(1440, span // 60)
         cfg._validate()
         return cfg
 
@@ -267,6 +390,23 @@ class Config:
             raise ValueError("demand_profile must be one of peak, flat, commute, leisure")
         if self.demand_scenario not in DEMAND_SCENARIOS:
             raise ValueError("demand_scenario must be one of " + ", ".join(DEMAND_SCENARIOS))
+        if self.time_from is not None and parse_hhmm(self.time_from) is None:
+            raise ValueError("time_from must be 'HH:MM'")
+        if self.time_to is not None and parse_hhmm(self.time_to) is None:
+            raise ValueError("time_to must be 'HH:MM'")
+        if isinstance(self.warmup_min, bool) or not isinstance(self.warmup_min, (int, float)):
+            raise ValueError("warmup_min must be a number")
+        self.warmup_min = max(0, min(180, int(self.warmup_min)))
+        for nm in ("coord_cycle_s", "coord_offset_s"):
+            val = getattr(self, nm)
+            if isinstance(val, bool) or not isinstance(val, (int, float)) or val < 0:
+                raise ValueError(f"{nm} must be a non-negative integer")
+            setattr(self, nm, int(val))
+        if self.coord_cycle_s < 30:
+            raise ValueError("coord_cycle_s must be >= 30")
+        if isinstance(self.coord_bias, bool) or not isinstance(self.coord_bias, (int, float)):
+            raise ValueError("coord_bias must be a number")
+        self.coord_bias = min(2.0, max(1.0, float(self.coord_bias)))
         mix = self.vehicle_mix or {}
         if not isinstance(mix, dict) or not mix:
             raise ValueError("vehicle_mix must be a non-empty object")
@@ -443,7 +583,7 @@ def build_arrivals_from_csv(cfg: Config) -> list[dict[Movement, int]]:
     """
     fh, _src = open_feed(cfg)
 
-    buckets: list[dict[Movement, float]] = [dict() for _ in range(cfg.steps)]
+    buckets: list[dict[Movement, float]] = [dict() for _ in range(cfg.total_steps)]
     feed_seconds = 0
     rows = csv.DictReader(fh)
     for row in rows:
@@ -460,10 +600,10 @@ def build_arrivals_from_csv(cfg: Config) -> list[dict[Movement, int]]:
         if (approach, turn) not in {(a, m) for a in APPROACHES for m in TURN_MOVEMENTS}:
             continue
         feed_seconds = max(feed_seconds, sec + 1)
-        if sec < cfg.steps:
+        if sec < cfg.total_steps:
             idx = sec
-        elif feed_seconds <= cfg.steps:
-            idx = sec % cfg.steps          # tile a shorter feed
+        elif feed_seconds <= cfg.total_steps:
+            idx = sec % cfg.total_steps    # tile a shorter feed
         else:
             continue                        # ignore feed beyond the horizon
         b = buckets[idx]
@@ -477,6 +617,7 @@ def build_arrivals_from_csv(cfg: Config) -> list[dict[Movement, int]]:
     keep = 1.0 - cfg.detector_dropout
     arrivals: list[dict[Movement, int]] = []
     for b in buckets:
+        # (a warm-up prefix may exist; simulate() simply skips it when counting)
         row: dict[Movement, int] = {}
         for m, c in b.items():
             v = c * cfg.demand_multiplier * keep
@@ -487,11 +628,12 @@ def build_arrivals_from_csv(cfg: Config) -> list[dict[Movement, int]]:
 
 
 def build_arrivals(cfg: Config) -> list[dict[Movement, int]]:
-    """Pre-generate the arrival stream so both controllers face it identically."""
+    """Pre-generate the arrival stream so every controller faces it identically
+    (including the un-recorded warm-up prefix)."""
     if cfg.arrival_source == "csv":
         return build_arrivals_from_csv(cfg)
     rng = random.Random(cfg.seed)
-    steps = cfg.steps
+    steps = cfg.total_steps
     out: list[dict[Movement, int]] = []
     for t in range(steps):
         mult = cfg.profile_multiplier(t)
@@ -533,7 +675,7 @@ def build_bus_arrivals(cfg: Config) -> list[tuple[int, Movement]]:
 
     events: list[tuple[int, Movement]] = []
     t = rng.randint(20, cfg.bus_headway_s)
-    while t < cfg.steps:
+    while t < cfg.total_steps:
         events.append((t, pick()))
         t += max(30, int(cfg.bus_headway_s * (0.75 + 0.5 * rng.random())))
     return events
@@ -575,6 +717,11 @@ class FixedTimeController(Controller):
             self.plan.append((pname, frozenset(), "all_red", int(cfg.fixed_all_red)))
         self.pos = 0
         self.remaining = self.plan[0][3]
+        self.plan_info = {
+            "cycle_s": sum(e[3] for e in self.plan),
+            "greens": [int(g) for g in greens],
+            "source": "fester Tagesplan (Konfiguration, Webster-Splits)",
+        }
 
     def green_set(self) -> frozenset:
         return self.plan[self.pos][1]
@@ -736,6 +883,203 @@ class MaxPressureController(Controller):
         return decision
 
 
+class CoordinatedController(FixedTimeController):
+    """Green-wave coordination (corridor plan) applied to a single junction.
+
+    Real coordination binds a junction to its neighbours via a *shared cycle
+    length* and *progression offsets*; splits favour the main (coordinated)
+    axis at the expense of the side street. This controller reproduces exactly
+    that: the junction may not choose its Webster optimum but must run the
+    corridor master cycle (:pyattr:`Config.coord_cycle_s`, typically 90 s),
+    starts at the corridor offset, and gives the busier axis a green-share
+    bias (``coord_bias``).
+
+    Honest expectation at an *isolated* node: roughly fixed-time performance
+    (sometimes slightly worse) — with Poisson arrivals there are no platoons,
+    so the progression benefit of coordination cannot materialise here. It
+    does materialise in the district model (see ``network.py``), which is the
+    whole point of the corridor plan.
+    """
+
+    name = "coordinated"
+
+    def __init__(self, cycle: int = 90, offset: int = 12, bias: float = 1.25):
+        self.cycle = int(cycle)
+        self.offset = int(offset)
+        self.bias = float(bias)
+        self.plan_info: dict = {}
+
+    def reset(self, cfg: Config) -> None:
+        phases = cfg.phases()
+        if not phases:
+            self.plan = [("none", frozenset(), "green", 60)]
+            self.pos = 0
+            self.remaining = 60
+            return
+        yellow, all_red = int(cfg.fixed_yellow), int(cfg.fixed_all_red)
+        lost = len(phases) * (yellow + all_red)
+        available = max(len(phases) * 7, self.cycle - lost)
+
+        # axis demand (veh/h): which axis carries the corridor?
+        def axis_of(pmoves) -> str:
+            return "NS" if any(m[0] in ("N", "S") for m in pmoves) else "EW"
+        ns = sum(cfg.rate(a, mv) for (a, mv) in cfg.movements() if a in ("N", "S"))
+        ew = sum(cfg.rate(a, mv) for (a, mv) in cfg.movements() if a in ("E", "W"))
+        main_axis = "NS" if ns >= ew else "EW"
+
+        # phase demand, biased toward the coordinated axis, normalised to the cycle
+        dem = [sum(cfg.rate(a, mv) for (a, mv) in pmoves) for _, pmoves in phases]
+        biased = [d * (self.bias if axis_of(pm) == main_axis else 1.0 / self.bias)
+                  for d, (_, pm) in zip(dem, phases)]
+        total = sum(biased) or 1.0
+        greens = _int_split([max(7.0, available * b / total) for b in biased],
+                            available, floor=7)
+
+        self.plan = []
+        for (pname, pmoves), g in zip(phases, greens):
+            self.plan.append((pname, frozenset(pmoves), "green", int(g)))
+            self.plan.append((pname, frozenset(), "yellow", yellow))
+            self.plan.append((pname, frozenset(), "all_red", all_red))
+        self.pos = 0
+        self.remaining = self.plan[0][3]
+        # progression offset: enter the plan mid-cycle, as the corridor dictates
+        off = self.offset % sum(e[3] for e in self.plan)
+        while off >= self.plan[self.pos][3]:
+            off -= self.plan[self.pos][3]
+            self.pos = (self.pos + 1) % len(self.plan)
+        self.remaining = self.plan[self.pos][3] - off
+        self.plan_info = {"cycle_s": sum(e[3] for e in self.plan),
+                          "target_cycle_s": self.cycle,
+                          "offset_s": self.offset,
+                          "main_axis": main_axis, "bias": self.bias,
+                          "greens": list(greens),
+                          "source": f"Korridor-Takt {self.cycle}s, Offset {self.offset}s"}
+
+
+# Tuned* time-of-day buckets (clock hours): real practice is a multi-period
+# plan ("Mehrfahrzeitenplan"), not one daily average — counts of each bucket
+# produce their own Webster plan, switched by the clock.
+TUNED_BUCKETS = ((6, 10), (10, 15), (15, 21))
+
+
+def _tuned_bucket(h: float) -> int:
+    if 6 <= h < 10:
+        return 0
+    if 10 <= h < 15:
+        return 1
+    if 15 <= h < 21:
+        return 2
+    return 0 if h < 6 else 2
+
+
+def _peak_hour_rates(secs: list[dict[Movement, float]]) -> dict[Movement, float]:
+    """Flow rates (veh/h) of the busiest hour inside a bucket.
+
+    Signal plans are designed for the peak hour, not the bucket mean — Webster
+    on diluted means undersizes the cycle and collapses at rush.
+    """
+    n = len(secs)
+    if n == 0:
+        return {}
+    moves = list(secs[0].keys())
+    prefix = {m: [0.0] * (n + 1) for m in moves}
+    for i, row in enumerate(secs):
+        for m in moves:
+            prefix[m][i + 1] = prefix[m][i] + row.get(m, 0.0)
+    span = min(3600, n)
+    best_t, best_v = 0, -1.0
+    for s in range(0, n - span + 1):
+        v = sum(prefix[m][s + span] - prefix[m][s] for m in moves)
+        if v > best_v:
+            best_v, best_t = v, s
+    return {m: (prefix[m][best_t + span] - prefix[m][best_t]) / span * 3600.0
+            for m in moves}
+
+
+class TunedController(FixedTimeController):
+    """Webster plans *derived from stop-line detector counts*.
+
+    The junction-level twin of the district model's ``fixed_tuned_est``
+    ("Tuned*"): real detectors count arriving vehicles per movement; from those
+    counts the controller computes critical flow ratios and Webster-optimal
+    cycle/green splits — one plan per time-of-day bucket (morning, midday,
+    evening), switched by the clock. In the simulation the counts are the
+    PCE-weighted arrivals of the shared stream — exactly what a stop-line
+    counter would have measured. No adaptivity mid-bucket: the plan is fixed.
+    """
+
+    name = "tuned"
+
+    def __init__(self, bucket_counts: list[dict[Movement, float]] | None = None,
+                 buckets: tuple = TUNED_BUCKETS):
+        self.bucket_counts = bucket_counts or []
+        self.buckets = buckets
+        self.plan_info: dict = {}
+
+    def _webster(self, cfg: Config, counts: dict[Movement, float]) -> tuple[list, dict]:
+        phases = cfg.phases()
+        yellow, all_red = int(cfg.fixed_yellow), int(cfg.fixed_all_red)
+        lost = len(phases) * (yellow + all_red)
+        sat = cfg.sat_flow_effective
+        # Webster: per phase the *critical* (max) movement flow ratio v/s
+        y = []
+        for _, pmoves in phases:
+            ratios = [counts.get(m, 0.0) / (max(1, cfg.lanes[m[1]]) * sat)
+                      for m in pmoves]
+            y.append(max(ratios) if ratios else 0.0)
+        Y = sum(y)
+        if Y <= 1e-6:
+            equal = max(len(phases) * 7, 60 - lost) / len(phases)
+            greens = [int(round(equal))] * len(phases)
+        else:
+            cycle = int(min(150, max(40, (1.5 * lost + 5) / (1.0 - min(0.95, Y)))))
+            available = max(len(phases) * 6, cycle - lost)
+            greens = _int_split([max(6.0, available * yi / Y) for yi in y],
+                                available, floor=6)
+        plan = []
+        for (pname, pmoves), g in zip(phases, greens):
+            plan.append((pname, frozenset(pmoves), "green", int(g)))
+            plan.append((pname, frozenset(), "yellow", yellow))
+            plan.append((pname, frozenset(), "all_red", all_red))
+        info = {"cycle_s": sum(e[3] for e in plan), "greens": list(greens),
+                "flow_ratios": [round(v, 3) for v in y],
+                "y_total": round(Y, 3)}
+        return plan, info
+
+    def reset(self, cfg: Config) -> None:
+        self.plans: list[tuple[list, dict]] = []
+        for counts in self.bucket_counts:
+            self.plans.append(self._webster(cfg, counts))
+        if not self.plans:
+            plan, info = self._webster(cfg, {})
+            self.plans = [(plan, info)]
+        # empty buckets fall back to the busiest bucket's plan
+        nonempty = [i for i, (_, inf) in enumerate(self.plans) if inf["y_total"] > 1e-6]
+        self.fallback_idx = nonempty[0] if nonempty else 0
+        self.active = None
+        self.plan = self.plans[self.fallback_idx][0]
+        self.pos = 0
+        self.remaining = self.plan[0][3]
+        self.plan_info = {
+            "buckets": [{"from_h": b[0], "to_h": b[1], **inf}
+                        for b, (_, inf) in zip(self.buckets, self.plans)],
+            "source": "Stopp-Linien-Zählungen je Tageszeit, Webster-Zyklus und -Splits",
+        }
+
+    def step(self, t, q, cfg, buses=None, flows=None) -> dict:
+        if self.plans:
+            idx = _tuned_bucket(cfg.clock_at(t) / 3600.0) if cfg.has_window else 0
+            _, info = self.plans[idx]
+            if info["y_total"] <= 1e-6:
+                idx = self.fallback_idx
+            if idx != self.active:
+                self.active = idx
+                self.plan = self.plans[idx][0]
+                self.pos = 0
+                self.remaining = self.plan[0][3]
+        return super().step(t, q, cfg, buses, flows)
+
+
 # ---------------------------------------------------------------------------
 # Simulation harness
 # ---------------------------------------------------------------------------
@@ -747,7 +1091,13 @@ def _opposite_through(m: Movement) -> Movement | None:
 
 
 def simulate(cfg: Config, arrivals: list[dict[Movement, int]], controller: Controller,
-             frame_target: int = 400) -> dict:
+             frame_target: int = 400, warmup: int = 0) -> dict:
+    """Run one controller over the shared arrival stream.
+
+    ``warmup`` skips the first N seconds when accumulating KPIs (the system
+    starts "in traffic" instead of empty); frames/decisions also cover only the
+    recorded span, with frame ``t`` rebased to 0 at the end of the warm-up.
+    """
     moves = cfg.movements()
     q: dict[Movement, float] = {m: 0.0 for m in moves}
     # effective saturation flow is reduced by the heavy-vehicle mix (PCE)
@@ -772,27 +1122,32 @@ def simulate(cfg: Config, arrivals: list[dict[Movement, int]], controller: Contr
     wasted = 0.0
     max_q = 0.0
     q_sum = 0.0
+    rec_steps = 0
     stops = 0
     decisions: list[dict] = []
 
     sample_every = max(1, cfg.steps // max(1, frame_target))
     frames: list[dict] = []
 
-    for t, row in enumerate(arrivals):
+    for t_raw, row in enumerate(arrivals):
+        rec = t_raw >= warmup            # warm-up runs, but is not counted
+        t = t_raw - warmup               # recorded clock (0 = window start)
         # 1) arrivals
         for m, n in row.items():
             if n:
                 q[m] += n
-                arrived += n
-                if q[m] - n >= 0.5:
-                    stops += n          # arrived into a non-empty lane -> slowed
+                if rec:
+                    arrived += n
+                    if q[m] - n >= 0.5:
+                        stops += n       # arrived into a non-empty lane -> slowed
 
         # 1b) buses arriving this second (charged their PCE in the queue)
-        while bidx < len(bus_events) and bus_events[bidx][0] == t:
+        while bidx < len(bus_events) and bus_events[bidx][0] == t_raw:
             bm = bus_events[bidx][1]
             q[bm] += PCE["bus"]
             bus_queue[bm] += 1
-            buses_arrived += 1
+            if rec:
+                buses_arrived += 1
             bidx += 1
 
         # 2) controller decision
@@ -820,41 +1175,43 @@ def simulate(cfg: Config, arrivals: list[dict[Movement, int]], controller: Contr
             if bus_queue[m] and q[m] < 0.5:
                 bus_queue[m] = 0
 
-        # 4) metrics
-        q_now = sum(q.values())
-        q_sum += q_now
-        max_q = max(max_q, q_now)
-        delay += q_now * cfg.dt
-        bus_delay += sum(bus_queue.values()) * cfg.dt
-        if green and all(q[m] < 0.5 for m in green):
-            wasted += cfg.dt
+        # 4) metrics (recorded span only)
+        if rec:
+            q_now = sum(q.values())
+            q_sum += q_now
+            rec_steps += 1
+            max_q = max(max_q, q_now)
+            delay += q_now * cfg.dt
+            bus_delay += sum(bus_queue.values()) * cfg.dt
+            if green and all(q[m] < 0.5 for m in green):
+                wasted += cfg.dt
 
-        if dec.get("switch"):
-            decisions.append({
-                "t": t,
-                "from": dec.get("phase"),
-                "to": dec.get("to"),
-                "reason": dec.get("reason"),
-                "pressures": dec.get("pressures"),
-            })
+            if dec.get("switch"):
+                decisions.append({
+                    "t": t,
+                    "from": dec.get("phase"),
+                    "to": dec.get("to"),
+                    "reason": dec.get("reason"),
+                    "pressures": dec.get("pressures"),
+                })
 
-        if t % sample_every == 0 or t == cfg.steps - 1:
-            frames.append({
-                "t": t,
-                "phase": dec["phase"],
-                "kind": dec["kind"],
-                "green": sorted(f"{a}-{mv}" for a, mv in green),
-                "q": {f"{a}-{mv}": round(q[(a, mv)], 2) for (a, mv) in moves},
-                "served": round(step_served, 2),
-                "delay_s": round(delay, 1),
-            })
+            if t % sample_every == 0 or t_raw == len(arrivals) - 1:
+                frames.append({
+                    "t": t,
+                    "phase": dec["phase"],
+                    "kind": dec["kind"],
+                    "green": sorted(f"{a}-{mv}" for a, mv in green),
+                    "q": {f"{a}-{mv}": round(q[(a, mv)], 2) for (a, mv) in moves},
+                    "served": round(step_served, 2),
+                    "delay_s": round(delay, 1),
+                })
 
     summary = {
         "controller": controller.name,
         "arrived": arrived,
         "served": served,
         "avg_delay_s": round(delay / max(1, arrived), 2),
-        "avg_queue": round(q_sum / max(1, cfg.steps), 3),
+        "avg_queue": round(q_sum / max(1, rec_steps), 3),
         "max_queue": round(max_q, 2),
         "throughput_vph": round(served / (cfg.steps / 3600.0), 1),
         "stops": stops,
@@ -870,13 +1227,36 @@ def simulate(cfg: Config, arrivals: list[dict[Movement, int]], controller: Contr
 
 
 def run_scenario(cfg_dict: dict | None = None, frame_target: int = 400) -> dict:
-    """Run baseline vs adaptive on identical arrivals and return a full payload."""
+    """Run every controller on identical arrivals and return a full payload.
+
+    Signalised junctions compare **four** strategies (Fixed, Adaptive,
+    Coordinated, Tuned); a roundabout compares the signalised reference against
+    unsignalised yield control. The wall-clock window (``time_from``/``time_to``)
+    drives the within-day demand and ``warmup_min`` is simulated un-recorded.
+    """
     cfg = Config.from_dict(cfg_dict)
+    warmup = int(cfg.warmup_min) * 60
     arrivals = build_arrivals(cfg)
 
     if cfg.signalized:
-        fixed = simulate(cfg, arrivals, FixedTimeController(), frame_target)
-        adaptive = simulate(cfg, arrivals, MaxPressureController(), frame_target)
+        # stop-line detector counts per time-of-day bucket (PCE-weighted):
+        # what a counter at the stop line would have measured in the window;
+        # each bucket yields the rates of its own busiest hour (peak-hour design)
+        nb = len(TUNED_BUCKETS)
+        b_secs: list[list[dict[Movement, float]]] = [[] for _ in range(nb)]
+        for i, row in enumerate(arrivals[warmup:]):
+            idx = _tuned_bucket(cfg.clock_at(i) / 3600.0) if cfg.has_window else 1
+            b_secs[idx].append({m: n * cfg.pce_avg for m, n in row.items()})
+        bucket_counts = [_peak_hour_rates(secs) for secs in b_secs]
+        controllers = {
+            "fixed": FixedTimeController(),
+            "adaptive": MaxPressureController(),
+            "coordinated": CoordinatedController(cfg.coord_cycle_s, cfg.coord_offset_s,
+                                                 cfg.coord_bias),
+            "tuned": TunedController(bucket_counts),
+        }
+        runs = {k: simulate(cfg, arrivals, c, frame_target, warmup)
+                for k, c in controllers.items()}
         ref_label, alt_label = "Fixed-Time", "Adaptiv"
     else:
         # roundabout: compare a signalised reference (cross4 plan on the same arms)
@@ -884,11 +1264,12 @@ def run_scenario(cfg_dict: dict | None = None, frame_target: int = 400) -> dict:
         sig = Config.from_dict({**cfg.to_dict(), "junction_type": "cross4",
                                 "permissive_left": False})
         sig.fixed_greens = [36, 10, 32, 8]
-        fixed = simulate(sig, arrivals, FixedTimeController(), frame_target)
-        adaptive = simulate(cfg, arrivals, RoundaboutController(), frame_target)
+        controllers = {"fixed": FixedTimeController(), "adaptive": RoundaboutController()}
+        runs = {k: simulate(sig if k == "fixed" else cfg, arrivals, c, frame_target, warmup)
+                for k, c in controllers.items()}
         ref_label, alt_label = "Signalanlage", "Kreisverkehr"
 
-    f, a = fixed["summary"], adaptive["summary"]
+    f, a = runs["fixed"]["summary"], runs["adaptive"]["summary"]
 
     def pct_reduction(base: float, new: float) -> float:
         return round((base - new) / base * 100.0, 1) if base else 0.0
@@ -902,7 +1283,11 @@ def run_scenario(cfg_dict: dict | None = None, frame_target: int = 400) -> dict:
         "wasted_green_pct": pct_reduction(f["wasted_green_s"], a["wasted_green_s"]),
     }
 
-    return {
+    def plan_of(key: str) -> dict | None:
+        ctrl = controllers.get(key)
+        return getattr(ctrl, "plan_info", None)
+
+    out = {
         "config": cfg.to_dict(),
         "phases": cfg.phase_names(),
         "junction": {"type": cfg.junction_type, "label": cfg.spec()["label"],
@@ -912,21 +1297,39 @@ def run_scenario(cfg_dict: dict | None = None, frame_target: int = 400) -> dict:
         "scenario": {"name": cfg.demand_scenario, "label": cfg.scenario["label"],
                      "multiplier": cfg.scenario_multiplier, "profile": cfg.profile_name(),
                      "vehicle_mix": dict(cfg.vehicle_mix), "pce_avg": round(cfg.pce_avg, 3),
-                     "transit_priority": cfg.transit_priority},
+                     "transit_priority": cfg.transit_priority,
+                     "time_from": cfg.time_from, "time_to": cfg.time_to,
+                     "warmup_min": cfg.warmup_min, "clock": cfg.has_window},
         "summary": {"fixed": f, "adaptive": a},
         "improvement": improvement,
         "bus": {"arrived": f.get("buses_arrived", 0),
                 "avg_delay_fixed_s": f.get("avg_bus_delay_s", 0.0),
                 "avg_delay_adaptive_s": a.get("avg_bus_delay_s", 0.0)},
-        "fixed": {"frames": fixed["frames"]},
-        "adaptive": {"frames": adaptive["frames"], "decisions": adaptive["decisions"][:200]},
+        "fixed": {"frames": runs["fixed"]["frames"], "plan": plan_of("fixed")},
+        "adaptive": {"frames": runs["adaptive"]["frames"],
+                     "decisions": runs["adaptive"]["decisions"][:200]},
         "meta": {
             "steps": cfg.steps,
-            "frame_dt": fixed["frame_dt"],
+            "frame_dt": runs["fixed"]["frame_dt"],
             "arrival_source": cfg.arrival_source,
+            "time_from": cfg.time_from, "time_to": cfg.time_to,
+            "warmup_min": cfg.warmup_min, "clock": cfg.has_window,
             "generated": "SignalFlow v0.1 (queueing model, dt=1s)",
         },
     }
+    if cfg.signalized:
+        out["summary"]["coordinated"] = runs["coordinated"]["summary"]
+        out["summary"]["tuned"] = runs["tuned"]["summary"]
+        out["coordinated"] = {"frames": runs["coordinated"]["frames"],
+                              "plan": plan_of("coordinated")}
+        out["tuned"] = {"frames": runs["tuned"]["frames"], "plan": plan_of("tuned")}
+        out["junction"]["policies"] = [
+            {"key": "fixed", "label": "Fixed"},
+            {"key": "adaptive", "label": "Adaptiv"},
+            {"key": "coordinated", "label": "Koord."},
+            {"key": "tuned", "label": "Tuned*"},
+        ]
+    return out
 
 
 if __name__ == "__main__":  # tiny CLI smoke test

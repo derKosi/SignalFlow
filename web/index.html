@@ -45,10 +45,6 @@
   <button id="btn-speak-result" class="btn ghost" type="button">🔊 Ergebnis vorlesen</button>
   <button id="btn-export" class="btn ghost" type="button" title="Kreuzungsansicht als PNG">⤓ Bild</button>
   <label class="btn ghost" style="cursor:pointer"><input id="chk-autospeak" type="checkbox" style="vertical-align:middle;margin-right:6px" />Auto-Vorlesen</label>
-
-  <button id="btn-simulate" class="btn primary" type="button">
-    <span class="btn-label">Neu simulieren</span>
-  </button>
 </header>
 
 <main id="main">
@@ -67,94 +63,104 @@
 
   <!-- ======================= CONTROL BAR ======================= -->
   <section class="panel controls" aria-label="Simulationsparameter">
-    <div class="control">
-      <label for="ctl-duration" title="Länge des simulierten Durchgangs (5–60 min) — kein Tageszeitbezug: das Szenario (z. B. Berufsverkehr) skaliert die Nachfrage über die Laufzeit">Dauer (min)</label>
-      <input id="ctl-duration" type="range" min="5" max="60" step="1" value="30" />
-      <output id="val-duration" for="ctl-duration">30</output>
-    </div>
+    <button id="btn-simulate" class="btn primary sim-run" type="button" title="Simulation mit den gewählten Einstellungen neu rechnen">
+      <span class="btn-label">▶ Simulieren</span>
+    </button>
 
-    <div class="control">
-      <label for="ctl-load">Last (×)</label>
-      <input id="ctl-load" type="range" min="0.5" max="1.4" step="0.05" value="1.0" />
-      <output id="val-load" for="ctl-load">1.00</output>
-    </div>
+    <div class="ctl-group">
+      <h3>Nachfrage <span class="grp-sub">wer kommt wann, wie viele?</span></h3>
+      <div class="ctl-grid">
+        <div class="control">
+          <label for="ctl-scenario" title="Tagestyp: legt die Form des Tagesgangs fest (zwei Spitzen beim Berufsverkehr, Mittagshügel am Wochenende) und setzt ein passende Zeitfenster vor">Szenario (Tagesgang)</label>
+          <select id="ctl-scenario">
+            <option value="normal">Normal (Wochentag, Tagesgeschäft)</option>
+            <option value="berufsverkehr">Berufsverkehr (Mo–Fr, 2 Spitzen)</option>
+            <option value="ferien">Ferien (flau, keine Spitze)</option>
+            <option value="freizeit">Wochenende (Mittagshügel)</option>
+          </select>
+          <span class="desc">setzt Zeitfenster vor, frei anpassbar</span>
+        </div>
 
-    <div class="control">
-      <label for="ctl-junction">Kreuzungstyp</label>
-      <select id="ctl-junction">
-        <option value="cross4">Kreuzung (geschützte Linksabbieger)</option>
-        <option value="cross4_permissive">Kreuzung (permissive Linksabbieger)</option>
-        <option value="t3">T-Kreuzung (3 Arme)</option>
-        <option value="roundabout">Kreisverkehr (unsignalisiert)</option>
-      </select>
-    </div>
+        <div class="control time-control">
+          <label for="ctl-time-from" title="Simulierter Zeitraum: die Nachfrage folgt der echten Uhrzeit (z. B. beide Berufsverkehr-Wellen bei 07–18 Uhr). 15 min vor Start wird zum Aufwärmen simuliert, ohne dass es in die Kennzahlen fließt.">Zeitfenster (Uhrzeit)</label>
+          <div class="time-row">
+            <select id="ctl-dow" aria-label="Wochentag">
+              <option value="wd">Mo–Fr</option>
+              <option value="sa">Sa</option>
+              <option value="so">So</option>
+            </select>
+            <input id="ctl-time-from" type="time" value="07:00" aria-label="von" />
+            <span class="time-sep">–</span>
+            <input id="ctl-time-to" type="time" value="18:00" aria-label="bis" />
+            <label class="time-hol" title="≈ −30 % Nachfrage"><input id="ctl-holiday" type="checkbox" /> Fer.</label>
+          </div>
+          <span id="time-hint" class="time-hint"></span>
+        </div>
 
-    <div class="control">
-      <label for="ctl-scenario" title="Saison/Tagestyp: bestimmt Nachfrage-Menge UND Tagesgang">Szenario (Saison/Tagestyp)</label>
-      <select id="ctl-scenario">
-        <option value="normal">Normal (Wochentag, mittlere Spitze)</option>
-        <option value="berufsverkehr">Berufsverkehr (Rush, 2 Spitzen)</option>
-        <option value="ferien">Ferien (≈−30 %, flach)</option>
-        <option value="freizeit">Freizeit / Wochenende (Mittagshügel)</option>
-      </select>
-    </div>
-
-    <div class="control">
-      <label for="ctl-mix">Fahrzeugmix</label>
-      <select id="ctl-mix">
-        <option value="car">nur Pkw</option>
-        <option value="city">Stadt (Pkw/Van/Lkw/Bus)</option>
-        <option value="truck">Lkw-lastig</option>
-      </select>
-    </div>
-
-    <div class="control">
-      <label for="ctl-tsp">Bus-Priorität</label>
-      <select id="ctl-tsp">
-        <option value="off">aus</option>
-        <option value="on">an (TSP)</option>
-      </select>
-    </div>
-
-    <div class="control presets-control">
-      <label>Schnellwahl Szenario</label>
-      <div class="presets">
-        <button class="btn ghost preset active" data-scenario="normal" type="button">Normal</button>
-        <button class="btn ghost preset" data-scenario="berufsverkehr" type="button">Berufsverkehr</button>
-        <button class="btn ghost preset" data-scenario="ferien" type="button">Ferien</button>
-        <button class="btn ghost preset" data-scenario="freizeit" type="button">Wochenende</button>
+        <div class="control">
+          <label for="ctl-load">Last (×)</label>
+          <input id="ctl-load" type="range" min="0.5" max="1.4" step="0.05" value="1.0" />
+          <output id="val-load" for="ctl-load">1.00</output>
+          <span class="desc">Skaliert die Nachfrage zusätzlich</span>
+        </div>
       </div>
     </div>
 
-    <div class="control time-control">
-      <label for="ctl-time-from" title="Tageszeit-Fenster: wählt Szenario und Last automatisch (Berufsverkehr zu Stoßzeiten, Wochenend-Mittagshügel, nachts weniger, Ferien −30 %) — manuelle Auswahl bleibt möglich">Tageszeit (optional)</label>
-      <div class="time-row">
-        <select id="ctl-dow" aria-label="Wochentag">
-          <option value="wd">Mo–Fr</option>
-          <option value="sa">Sa</option>
-          <option value="so">So</option>
-        </select>
-        <input id="ctl-time-from" type="time" value="07:30" aria-label="von" />
-        <span class="time-sep">–</span>
-        <input id="ctl-time-to" type="time" value="08:30" aria-label="bis" />
-        <label class="time-hol" title="≈ −30 % Nachfrage"><input id="ctl-holiday" type="checkbox" /> Fer.</label>
+    <div class="ctl-group">
+      <h3>Szenerie <span class="grp-sub">Objekt &amp; Fahrzeuge</span></h3>
+      <div class="ctl-grid">
+        <div class="control">
+          <label for="ctl-junction">Kreuzungstyp</label>
+          <select id="ctl-junction">
+            <option value="cross4">Kreuzung (geschützte Linksabbieger)</option>
+            <option value="cross4_permissive">Kreuzung (permissive Linksabbieger)</option>
+            <option value="t3">T-Kreuzung (3 Arme)</option>
+            <option value="roundabout">Kreisverkehr (unsignalisiert)</option>
+          </select>
+          <span class="desc">beim Kreisverkehr: Signal vs. Yield</span>
+        </div>
+
+        <div class="control">
+          <label for="ctl-mix">Fahrzeugmix</label>
+          <select id="ctl-mix">
+            <option value="car">nur Pkw</option>
+            <option value="city">Stadt (Pkw/Van/Lkw/Bus)</option>
+            <option value="truck">Lkw-lastig</option>
+          </select>
+          <span class="desc">schwere Fahrzeuge belegen mehr Platz</span>
+        </div>
+
+        <div class="control">
+          <label for="ctl-tsp">Bus-Priorität</label>
+          <select id="ctl-tsp">
+            <option value="off">aus</option>
+            <option value="on">an (TSP)</option>
+          </select>
+          <span class="desc">Bussen warten weniger lange</span>
+        </div>
       </div>
-      <span id="time-hint" class="time-hint"></span>
     </div>
 
-    <div class="control">
-      <label for="ctl-source">Datenquelle</label>
-      <select id="ctl-source">
-        <option value="model">Modell (Poisson)</option>
-        <option value="csv">Sensor-Feed (CSV)</option>
-      </select>
-    </div>
+    <details class="ctl-group expert">
+      <summary>Experten <span class="grp-sub">Datenquelle &amp; Zufall</span></summary>
+      <div class="ctl-grid">
+        <div class="control">
+          <label for="ctl-source">Datenquelle</label>
+          <select id="ctl-source">
+            <option value="model">Modell (Poisson)</option>
+            <option value="csv">Sensor-Feed (CSV)</option>
+          </select>
+          <span class="desc">Zähler-Statt-Generator: CSV möglich</span>
+        </div>
 
-    <div class="control">
-      <label for="ctl-seed">Seed</label>
-      <input id="ctl-seed" type="range" min="1" max="999" step="1" value="42" />
-      <output id="val-seed" for="ctl-seed">42</output>
-    </div>
+        <div class="control">
+          <label for="ctl-seed">Seed</label>
+          <input id="ctl-seed" type="range" min="1" max="999" step="1" value="42" />
+          <output id="val-seed" for="ctl-seed">42</output>
+          <span class="desc">gleicher Seed = gleicher Zufall</span>
+        </div>
+      </div>
+    </details>
   </section>
 
   <!-- ========================== KPIs ========================== -->
@@ -177,6 +183,19 @@
     <div class="viewer-bar">
       <div class="transport">
         <button id="btn-play" class="btn icon" type="button" title="Play/Pause">▶</button>
+
+        <div class="modes policy-modes" role="group" aria-label="Strategien ein- und ausblenden">
+          <button class="mode-btn pol-btn" data-pol="fixed" type="button"
+                  title="Fixed-Time: fester Signalplan, reagiert nicht auf Verkehr"><i class="pdot" style="background:#aab6c4"></i>Fixed</button>
+          <button class="mode-btn pol-btn" data-pol="adaptive" type="button"
+                  title="Adaptive (Max-Pressure): Phasen folgen dem live Warteschlangen-Druck"><i class="pdot" style="background:#2dd4bf"></i>Adaptiv</button>
+          <button class="mode-btn pol-btn" data-pol="coordinated" type="button"
+                  title="Koord. (grüne Welle): Korridor-Takt 90 s, Splits zugunsten der Hauptachse"><i class="pdot" style="background:#f5c451"></i>Koord.</button>
+          <button class="mode-btn pol-btn" data-pol="tuned" type="button"
+                  title="Tuned: Webster-Pläne aus Stopp-Linien-Zählungen, je Tageszeit"><i class="pdot" style="background:#7fd1a8"></i>Tuned</button>
+          <button class="mode-btn pol-btn all" data-pol="all" type="button" title="Alle vier Strategien anzeigen">Alle</button>
+        </div>
+
         <div class="speeds" role="group" aria-label="Geschwindigkeit">
           <button class="speed-btn" data-speed="0.5" type="button">0.5×</button>
           <button class="speed-btn active" data-speed="1" type="button">1×</button>
@@ -186,27 +205,30 @@
         </div>
       </div>
 
-      <div class="modes" role="group" aria-label="Controller-Ansicht">
-        <button class="mode-btn" data-mode="fixed" type="button">Fixed</button>
-        <button class="mode-btn active" data-mode="adaptive" type="button">Adaptive</button>
-        <button class="mode-btn" data-mode="both" type="button">Beide</button>
-      </div>
-
       <div class="readouts">
-        <span class="pill"><span class="k">Phase</span> <b id="playhead-phase">–</b></span>
+        <span class="pill"><span class="k">Uhrzeit</span> <b id="playhead-clock">–</b></span>
         <span class="pill mono"><span class="k">t</span> <b id="playhead-t">0.0s</b></span>
-        <span class="pill mono" title="Fahrzeuge insgesamt in Warteschlangen"><span class="k">Σ Queue</span> <b id="playhead-queue">–</b></span>
+        <span class="pill" id="pill-phase"><span class="k">Phase</span> <b id="playhead-phase">–</b></span>
+        <span class="pill mono" title="Fahrzeuge insgesamt in Warteschlangen (sichtbare Strategien)"><span class="k">Σ Queue</span> <b id="playhead-queue">–</b></span>
       </div>
     </div>
 
-    <div class="canvas-wrap" id="canvas-wrap">
-      <div class="canvas-cell" id="cell-main">
-        <div class="canvas-title" id="cell-main-title">Adaptive</div>
-        <canvas id="canvas-main"></canvas>
+    <div class="canvas-wrap" id="canvas-wrap" data-n="4">
+      <div class="canvas-cell" id="cell-fixed">
+        <div class="canvas-title">Fixed</div>
+        <canvas id="canvas-fixed"></canvas>
       </div>
-      <div class="canvas-cell" id="cell-alt">
-        <div class="canvas-title" id="cell-alt-title">Fixed</div>
-        <canvas id="canvas-alt"></canvas>
+      <div class="canvas-cell" id="cell-adaptive">
+        <div class="canvas-title">Adaptiv</div>
+        <canvas id="canvas-adaptive"></canvas>
+      </div>
+      <div class="canvas-cell" id="cell-coordinated">
+        <div class="canvas-title">Koord.</div>
+        <canvas id="canvas-coordinated"></canvas>
+      </div>
+      <div class="canvas-cell" id="cell-tuned">
+        <div class="canvas-title">Tuned</div>
+        <canvas id="canvas-tuned"></canvas>
       </div>
     </div>
 
@@ -227,13 +249,26 @@
   <!-- ========================= CHARTS ========================= -->
   <section class="charts">
     <div class="panel chart-panel">
-      <h2>Vorher / Nachher</h2>
-      <p class="panel-sub">Fixed-Time vs. Adaptive (gruppiert, je KPI eigen-skaliert)</p>
+      <h2>Strategien im Vergleich</h2>
+      <p class="panel-sub">Je Kennzahl eigen-skaliert, alle vier Strategien (Kreisverkehr: Signal vs. Yield)</p>
       <canvas id="chart-bars"></canvas>
     </div>
     <div class="panel chart-panel">
-      <h2>Verzögerung über die Zeit</h2>
-      <p class="panel-sub">Kumulierte Verzögerung über die Zeit (veh·s), Fixed vs. Adaptive</p>
+      <h2>Verlauf über die Zeit</h2>
+      <div class="chart-tools">
+        <div class="modes chart-metrics" role="group" aria-label="Metrik">
+          <button class="mode-btn met-btn active" data-met="queue" type="button" title="Fahrzeuge in Warteschlangen zum jeweiligen Zeitpunkt">Warteschlangen</button>
+          <button class="mode-btn met-btn" data-met="delay" type="button" title="Kumulierte Verzögerung (veh·s) — die „Burn-up“-Kurve">Verzögerung ∑</button>
+          <button class="mode-btn met-btn" data-met="co2" type="button" title="Kumulierter CO₂-Proxy (g), aus der Verzögerung abgeleitet">CO₂ ∑</button>
+        </div>
+        <div class="zoom-row">
+          <span class="k">Zoom</span>
+          <input id="zoom-from" type="time" value="06:00" aria-label="von" />
+          <span class="time-sep">–</span>
+          <input id="zoom-to" type="time" value="22:00" aria-label="bis" />
+          <button id="zoom-reset" class="btn ghost" type="button" title="ganzes Zeitfenster">Reset</button>
+        </div>
+      </div>
       <canvas id="chart-delay"></canvas>
     </div>
   </section>
@@ -241,13 +276,23 @@
   <!-- ====================== DECISIONS ====================== -->
   <section class="panel decisions">
     <h2>Warum? – Entscheidungsprotokoll</h2>
-    <p class="panel-sub">Phasenwechsel des adaptiven Controllers mit Begründung</p>
+    <p class="panel-sub">Wie jede Strategie entscheidet — Phasenwechsel des Adaptiv-Controllers mit Begründung, Pläne der anderen</p>
+    <div class="modes dec-tabs" role="group" aria-label="Strategie-Protokoll">
+      <button class="mode-btn dec-tab active" data-dec="adaptive" type="button">Adaptiv</button>
+      <button class="mode-btn dec-tab" data-dec="fixed" type="button">Fixed</button>
+      <button class="mode-btn dec-tab" data-dec="coordinated" type="button">Koord.</button>
+      <button class="mode-btn dec-tab" data-dec="tuned" type="button">Tuned</button>
+    </div>
     <div class="decisions-body">
-      <ul class="decision-list" id="decisions-list"></ul>
-      <div class="pressure-box">
-        <h3>Druck je Phase</h3>
-        <table class="pressures" id="pressures-table"></table>
+      <div id="dec-adaptive" class="dec-view">
+        <ul class="decision-list" id="decisions-list"></ul>
+        <div class="pressure-box">
+          <h3>Druck je Phase</h3>
+          <table class="pressures" id="pressures-table"></table>
+          <div id="adaptive-stats" class="adaptive-stats"></div>
+        </div>
       </div>
+      <div id="dec-plan" class="plan-box" hidden></div>
     </div>
   </section>
   </div><!-- /.dash-main -->

@@ -160,16 +160,24 @@ Every one of these assumptions is proper for a simulation — we state them open
 
 ## Outlook — time-, day- and traffic-dependent control
 
-First step built: the **time-of-day window** in the junction dashboard picks
-scenario and load automatically (weekday peak → rush hour, weekend noon →
-leisure hump, less at night, holidays ≈ −30 %). The research question behind
-it: control that reacts not only to *traffic* but to **time and day of week** —
-our sweep suggests adaptive wins at rush, the green wave on weekend arterials,
-tuned plans in quiet off-peak. Open questions: stochastic time-series arrivals
-in the district model (today flow-based deterministic), per-junction
-strategy selection over the day with switching hysteresis, and calibration
-against real count series. The signal timers are the easy part — the control
-logic is the research object.
+First step built — and considerably extended: the **time-of-day window** in
+both dashboards sets scenario and span (the scenario proposes the window,
+everything stays editable), and the **demand follows the real clock** inside
+it — a 07:00–18:00 rush window now reproduces both commute waves. A **warm-up**
+period (15 min junction / 5 min district) runs before the window and is
+excluded from the KPIs: the simulation starts "in traffic", not empty. The
+junction comparison now runs **all four strategies** on identical arrivals;
+Tuned derives a Webster plan per time-of-day bucket (a multi-period plan, as
+in real practice). The research question behind it: control that reacts not
+only to *traffic* but to **time and day of week** — our measurements suggest
+adaptive wins on the day average and at rush on an isolated junction, the
+green wave on corridors (district view), tuned plans in quiet off-peak. Open
+questions: stochastic time-series arrivals in the district model (today
+flow-based deterministic), per-junction strategy selection over the day with
+switching hysteresis, and calibration against real count series. The signal
+timers are the easy part — the control logic is the research object. A natural
+next step in the UI: a **week view** (Mon–Sun profile, one day type each), from
+which the per-day strategy choice could be read off directly.
 
 ## 8. References
 

@@ -26,7 +26,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .simulation import DEMAND_SCENARIOS, PCE, profile_value
+from .simulation import DEMAND_SCENARIOS, PCE, profile_value, profile_at_clock, parse_hhmm
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 REGIONS_DIR = PROJECT_ROOT / "data" / "regions"
@@ -808,6 +808,16 @@ class CoordinatedJunction:
 
 def _simulate(c: Compiled, demand: dict, controller, cfg: dict, frame_dt: int,
               corr_links: list | None = None, counts: list[float] | None = None):
+    """Mesoscopic link-queue run over the shared demand.
+
+    Wall-clock window semantics (``time_from``/``time_to``): the within-day
+    demand *shape* is evaluated at the window clock. Spans longer than the
+    simulated steps run as an explicit time-lapse — the clock sweeps the window
+    faster, but **volumes stay 1:1** (scaling inflow with the lapse factor would
+    collapse the queue physics); the day's shape appears compressed, the KPI
+    magnitudes stay honest. ``warmup_min`` runs un-recorded so the network
+    starts "in traffic" instead of empty.
+    """
     n_l = c.n_links
     sched = [deque([0.0] * c.tff[l]) for l in range(n_l)]
     in_transit = [0.0] * n_l
@@ -819,8 +829,12 @@ def _simulate(c: Compiled, demand: dict, controller, cfg: dict, frame_dt: int,
     pce = max(1e-9, float(cfg.get("pce", 1.0)))
 
     steps = int(cfg["duration_min"] * 60)
+    warmup = int(cfg.get("warmup_min", 0)) * 60
     mult = cfg["demand_multiplier"]
     profile = cfg.get("demand_profile", "peak")
+    from_sec = parse_hhmm(cfg.get("time_from")) if cfg.get("time_from") else None
+    span_sec = float(cfg.get("span_sec") or steps)
+    clock_rate = max(1.0, span_sec / max(1, steps))   # wall-s per sim-s (>= 1)
 
     total_delay = 0.0
     served = 0.0
@@ -840,8 +854,14 @@ def _simulate(c: Compiled, demand: dict, controller, cfg: dict, frame_dt: int,
     inflow_hat = [0.0] * n_l        # EWMA of measured link inflow (detector proxy)
     ALPHA = 0.02
 
-    for t in range(steps):
-        pm = float(profile_value(profile, t, steps))
+    for t_raw in range(steps + warmup):
+        rec = t_raw >= warmup
+        t = t_raw - warmup
+        if from_sec is not None:
+            # clock sweeps the window during the recorded span (time-lapse > 1x)
+            pm = float(profile_at_clock(profile, from_sec + t * clock_rate))
+        else:
+            pm = float(profile_value(profile, t, steps))
         step_in: dict[int, float] = {}
 
         for l, r in entry_items:
@@ -916,18 +936,19 @@ def _simulate(c: Compiled, demand: dict, controller, cfg: dict, frame_dt: int,
                             served += leave
                             queue[l] -= (leave + placed)
                             q_total -= (leave + placed)
-                if counts is not None:
+                if counts is not None and rec:
                     counts[l] += q0 - queue[l]   # stop-line detector count
 
         in_net = q_total + t_total
         for l, v in step_in.items():
             inflow_hat[l] = (1 - ALPHA) * inflow_hat[l] + ALPHA * v
-        in_net_sum += in_net
-        total_delay += q_total
-        if corr_links:
-            corr_delay += sum(queue[l] for l in corr_links)
+        if rec:
+            in_net_sum += in_net
+            total_delay += q_total
+            if corr_links:
+                corr_delay += sum(queue[l] for l in corr_links)
 
-        if t % frame_dt == 0 or t == steps - 1:
+        if rec and (t % frame_dt == 0 or t == steps - 1):
             frames.append({
                 "t": t,
                 "q": [[l, round(queue[l], 2)] for l in active if queue[l] >= 0.5],
@@ -935,12 +956,13 @@ def _simulate(c: Compiled, demand: dict, controller, cfg: dict, frame_dt: int,
                        for k, n in enumerate(c.signalized)],
             })
 
+    wall_hours = max(1e-9, steps / 3600.0)
     summary = {
         "controller": controller.name,
         "served": round(served, 1),
         "spawned": round(spawned, 1),
         "in_network_at_end": round(q_total + t_total, 1),
-        "throughput_vph": round(served / (steps / 3600.0), 1),
+        "throughput_vph": round(served / wall_hours, 1),
         "avg_delay_s": round(total_delay / max(1.0, served), 2),
         "avg_travel_time_s": round((in_net_sum / served) if served else 0.0, 2),
         "total_delay_vehsec": round(total_delay, 1),
@@ -956,6 +978,23 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
     cfg = dict(cfg or {})
     duration_min = int(cfg.get("duration_min", 15))
     seed = int(cfg.get("seed", 42))
+    # wall-clock window ("HH:MM"): demand follows the real clock; spans longer
+    # than the simulated span run as an explicit time-lapse (clock_rate > 1)
+    time_from = cfg.get("time_from") or None
+    time_to = cfg.get("time_to") or None
+    from_sec = parse_hhmm(time_from) if time_from else None
+    to_sec = parse_hhmm(time_to) if time_to else None
+    if time_from and from_sec is None:
+        raise ValueError("time_from must be 'HH:MM'")
+    if time_to and to_sec is None:
+        raise ValueError("time_to must be 'HH:MM'")
+    span_min = None
+    if from_sec is not None and to_sec is not None:
+        span_min = ((to_sec - from_sec) % 86400) // 60
+    warmup_min = max(0, min(60, int(cfg.get("warmup_min", 5))))
+    if "duration_min" not in cfg and span_min:
+        duration_min = max(15, min(120, span_min))
+    span_sec = float(span_min * 60) if span_min else float(duration_min * 60)
     scenario_name = cfg.get("demand_scenario") or ("custom" if "demand_profile" in cfg else "normal")
     if scenario_name not in DEMAND_SCENARIOS:
         raise ValueError("demand_scenario must be one of " + ", ".join(DEMAND_SCENARIOS))
@@ -989,7 +1028,8 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
     tsp = bool(cfg.get("transit_priority", False))
 
     base = {"duration_min": duration_min, "seed": seed, "demand_multiplier": mult,
-            "demand_profile": profile, "pce": pce}
+            "demand_profile": profile, "pce": pce, "warmup_min": warmup_min,
+            "time_from": time_from, "time_to": time_to, "span_sec": span_sec}
     frame_dt = max(1, (duration_min * 60) // 90)
 
     counts = [0.0] * c.n_links
@@ -1075,13 +1115,19 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
         "scenario": {"name": scenario_name, "label": scen["label"],
                      "multiplier": round(mult, 3), "profile": profile,
                      "vehicle_mix": dict(mix), "pce_avg": round(pce, 3),
-                     "transit_priority": tsp},
+                     "transit_priority": tsp,
+                     "time_from": time_from, "time_to": time_to,
+                     "warmup_min": warmup_min, "clock": from_sec is not None},
         "summary": {"fixed": f, "fixed_tuned": t_, "adaptive": a, "coordinated": k,
                     **({"fixed_tuned_est": tuned_est[0]} if tuned_est else {})},
         "improvement": improvement,
         "frames": {"fixed": fixed[1], "adaptive": adaptive[1], "coordinated": coordinated[1]},
         "config": {**base, "total_vph": total_vph, "frame_dt": frame_dt},
         "meta": {"steps": duration_min * 60, "frame_dt": frame_dt,
+                 "clock": from_sec is not None,
+                 "clock_rate": round(span_sec / (duration_min * 60), 3),
+                 "span_min": round(span_sec / 60), "warmup_min": warmup_min,
+                 "time_from": time_from, "time_to": time_to,
                  "generated": "SignalFlow network v0.4 (OSM link-queue + green wave "
                               "+ count-based OD)",
                  **({"od_estimation": od_meta} if od_meta else {})},

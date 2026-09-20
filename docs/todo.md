@@ -43,13 +43,14 @@ with zero runtime dependencies).
 
 ## P2 — after the hackathon
 
-* **Time- and day-dependent control** (the "von–bis" research hook): first
-  step built as UI automation (junction dashboard time window → scenario +
-  load). Real research questions: stochastic time-series arrivals in the
-  district model (today fully deterministic/flow-based — the seed only
-  affects the junction model, now disclosed), per-junction strategy choice
-  over the day with switching hysteresis (our sweep hints: adaptive at rush,
-  green wave on weekend arterials, tuned plans off-peak), calibration on real
+* **Time- and day-dependent control** (the "von–bis" research hook):
+  **largely built** — wall-clock windows drive the demand in *both* models
+  (scenario proposes the window; warm-up 15/5 min un-recorded), the junction
+  runs all four strategies on identical arrivals, and Tuned derives a
+  multi-period Webster plan from detector counts (clock buckets 6–10/10–15/
+  15–21 h). Remaining research: stochastic time-series arrivals in the
+  district model (today flow-based deterministic — disclosed), per-junction
+  strategy choice over the day with switching hysteresis, calibration on real
   count series. Signal timers are the easy part.
 * **Network → junction drilldown**: *built* — clicking a signalised node on the
   district map opens a junction close-up (true bearings, link queues, real
@@ -72,9 +73,11 @@ with zero runtime dependencies).
 4. Roundabout capacity is a rough analytic estimate; no gap acceptance.
 5. Adaptive **beats the demand-oracle only with opt-in Webster** (Riem, Köln) — the
    default policy stays −8 %/−5 % behind (P1.1 residual).
-6. The dashboards were **never rendered in a real browser** (sandbox/macOS kills
-   browser processes — re-verified 2026-09-19, Playwright *and* raw Chromium) —
-   that is what P0.3 is for.
+6. The dashboards were originally never rendered in a real browser; since
+   2026-09-19/20 they are Playwright-verified on Windows (layout probes, pixel
+   scans, synthetic events) after every round — long-window network runs use
+   clock-only compression, so the day's shape is visible while KPI magnitudes
+   stay 1:1.
 7. Sponsor integrations are unproven without keys (P1.2).
 8. The OD-estimation pipeline is demonstrated *inside* the simulation (counts from
    the fixed run); no real-world detector dataset has touched it yet (P1.4).

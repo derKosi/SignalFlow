@@ -111,15 +111,65 @@
       bar.classList.toggle('done', !on);
       if (!on) setTimeout(function () { show(bar, false); bar.classList.remove('done', 'running'); }, 500);
     }
-    ['ctl-region', 'ctl-duration', 'ctl-load', 'ctl-scenario', 'ctl-mix', 'ctl-tsp', 'ctl-seed', 'ctl-vph', 'btn-run']
+    ['ctl-region', 'ctl-load', 'ctl-scenario', 'ctl-mix', 'ctl-tsp', 'ctl-seed', 'ctl-vph',
+     'ctl-dow', 'ctl-time-from', 'ctl-time-to', 'btn-run']
       .forEach(function (id) { const el = $(id); if (el) el.disabled = on; });
   }
 
   function disableAll() {
-    ['ctl-region', 'ctl-duration', 'ctl-load', 'ctl-scenario', 'ctl-mix', 'ctl-tsp', 'ctl-seed', 'ctl-vph',
-      'btn-run', 'btn-play', 'progress'].forEach(function (id) {
+    ['ctl-region', 'ctl-load', 'ctl-scenario', 'ctl-mix', 'ctl-tsp', 'ctl-seed', 'ctl-vph',
+      'ctl-dow', 'ctl-time-from', 'ctl-time-to', 'btn-run', 'btn-play', 'progress'].forEach(function (id) {
       const el = $(id); if (el) el.disabled = true;
     });
+  }
+
+  /* ------------------------ Zeitfenster (Uhrzeit) ------------------------ */
+  // Szenario ⇒ typisches Zeitfenster (wie auf der Einzelkreuzung); das Fenster
+  // bleibt frei anpassbar. Nachfrage folgt der Uhrzeit, Spannen > ~2 h laufen
+  // als Zeitraffer (der Server rechnet die KPIs auf die Wanduhr zurück).
+  var SCENARIO_WINDOWS = {
+    normal:        { dow: 'wd', from: '06:00', to: '22:00' },
+    berufsverkehr: { dow: 'wd', from: '07:00', to: '18:00' },
+    ferien:        { dow: 'wd', from: '09:00', to: '19:00' },
+    freizeit:      { dow: 'sa', from: '09:00', to: '21:00' },
+  };
+
+  function spanMinutes(fromS, toS) {
+    if (!fromS || !toS) return 0;
+    const min = function (s) { const p = s.split(':').map(Number); return (p[0] || 0) * 60 + (p[1] || 0); };
+    return ((min(toS) - min(fromS)) + 1440) % 1440 || 1440;
+  }
+
+  function applyScenarioPreset() {
+    const sel = $('ctl-scenario');
+    const w = SCENARIO_WINDOWS[sel ? sel.value : 'normal'] || SCENARIO_WINDOWS.normal;
+    if ($('ctl-dow')) $('ctl-dow').value = w.dow;
+    if ($('ctl-time-from')) $('ctl-time-from').value = w.from;
+    if ($('ctl-time-to')) $('ctl-time-to').value = w.to;
+    updateTimeHint();
+  }
+
+  function updateTimeHint() {
+    const fromS = ($('ctl-time-from') && $('ctl-time-from').value) || '07:00';
+    const toS = ($('ctl-time-to') && $('ctl-time-to').value) || '18:00';
+    const span = spanMinutes(fromS, toS);
+    const hint = $('time-hint');
+    if (hint) {
+      const h = span > 120 ? 'Tagesgang komprimiert · Mengen 1:1'
+                           : span + ' min in Echtzeit';
+      hint.textContent = 'Nachfrage folgt der Uhrzeit · ' + h;
+    }
+  }
+
+  // wall-clock string for sim second t (null when no window is configured)
+  function clockString(t) {
+    const res = state.result;
+    const from = res && res.meta && res.meta.time_from;
+    if (!from) return null;
+    const rate = (res.meta && res.meta.clock_rate) || 1;
+    const p = from.split(':').map(Number);
+    const total = (Math.round(((p[0] || 0) * 60 + (p[1] || 0)) + (t * rate) / 60)) % 1440;
+    return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
   }
 
   /* --------------------------- Regions laden ----------------------------- */
@@ -231,7 +281,9 @@
     const tsp = $('ctl-tsp') ? $('ctl-tsp').value : 'off';
     return {
       region: $('ctl-region').value,
-      duration_min: Number($('ctl-duration').value),
+      time_from: $('ctl-time-from') ? $('ctl-time-from').value : null,
+      time_to: $('ctl-time-to') ? $('ctl-time-to').value : null,
+      warmup_min: 5,
       demand_multiplier: Number($('ctl-load').value),
       demand_scenario: $('ctl-scenario') ? $('ctl-scenario').value : 'normal',
       vehicle_mix: {
@@ -535,6 +587,11 @@
     // Readouts
     const tEl = $('playhead-t');
     if (tEl) tEl.textContent = 't ' + timeStr(state.t) + ' / ' + timeStr(state.steps);
+    const cEl = $('playhead-clock');
+    if (cEl) {
+      const c = clockString(state.t);
+      cEl.textContent = c ? c + ' Uhr' : '–';
+    }
     const qEl = $('playhead-q');
     if (qEl) {
       const serKey = state.mode === 'both' ? 'adaptive' : state.mode;
@@ -848,7 +905,7 @@
       }
       let teRow = '';
       if (te && m.get(te) != null) {
-        teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned*</span><b>' + fmt(m.get(te), m.dec) + '</b></div>';
+        teRow = '<div class="row tuned-est"><span class="tag" title="' + POLICY_INFO.tuned + '">Tuned</span><b>' + fmt(m.get(te), m.dec) + '</b></div>';
       }
       const win = winnerOf(m);
       // 3-Spalten-Zeile: Label | Δ% (Zeilenfarbe) | Wert (bester fett)
@@ -861,7 +918,7 @@
                     win === 'coordinated', dltOf(m, m.get(co), fv).replace(/<\/?i[^>]*>/g, ''));
       }
       if (te && m.get(te) != null) {
-        teRow = row('tuned-est', 'Tuned*', POLICY_INFO.tuned, fmt(m.get(te), m.dec),
+        teRow = row('tuned-est', 'Tuned', POLICY_INFO.tuned, fmt(m.get(te), m.dec),
                     win === 'tuned', dltOf(m, m.get(te), fv).replace(/<\/?i[^>]*>/g, ''));
       }
       html += '<div class="kpi">' +
@@ -905,7 +962,7 @@
         extraRows += '<tr class="pol-coordinated"><th class="pol" title="' + POLICY_INFO.coordinated + '">Koord.</th>' + cells(co, 'coordinated') + '</tr>';
       }
       if (te) {
-        extraRows += '<tr class="pol-tuned"><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned*</th>' + cells(te, 'tuned') + '</tr>';
+        extraRows += '<tr class="pol-tuned"><th class="pol" title="' + POLICY_INFO.tuned + '">Tuned</th>' + cells(te, 'tuned') + '</tr>';
       }
       tableWrap.innerHTML = '<table class="kpi-table">' +
         '<thead><tr><th rowspan="2"></th>' + headCells + '</tr><tr>' + subHeads + '</tr></thead><tbody>' +
@@ -1033,8 +1090,9 @@
     const plotW = w - padL - padR, plotH = h - padT - padB;
 
     let ymax = 1;
-    fx.forEach(function (v) { if (v > ymax) ymax = v; });
-    ad.forEach(function (v) { if (v > ymax) ymax = v; });
+    [state.series.fixed, state.series.adaptive, state.series.coordinated].forEach(function (ser) {
+      (ser || []).forEach(function (v) { if (v > ymax) ymax = v; });
+    });
     ymax = Math.ceil(ymax * 1.15);
 
     // Grid
@@ -1050,14 +1108,16 @@
       const y = padT + plotH * i / 4;
       ctx.fillText(fmt(ymax * (1 - i / 4), 0), padL - 6, y);
     }
-    // X-Labels (Minuten)
+    // X-Labels: Uhrzeit, wenn ein Zeitfenster gesetzt ist, sonst Minuten
     ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-    const mins = Math.max(1, Math.round(state.steps / 60));
-    const ticks = Math.min(6, mins);
+    const hasClock = !!clockString(0);
+    const ticks = 6;
     for (let i = 0; i <= ticks; i++) {
       const frac = i / ticks;
       const x = padL + plotW * frac;
-      ctx.fillText(Math.round(mins * frac) + '′', x, padT + plotH + 8);
+      const simT = state.steps * frac;
+      ctx.fillText(hasClock ? (clockString(simT) + (i === ticks ? ' Uhr' : ''))
+                            : Math.round(state.steps / 60 * frac) + '′', x, padT + plotH + 8);
     }
 
     function plot(series, color, width) {
@@ -1072,6 +1132,7 @@
       }
       ctx.stroke();
     }
+    plot(state.series.coordinated || [], '#f5c451', 1.6);  // Koord. (Welle)
     plot(fx, '#64748b', 1.8);      // Fixed
     plot(ad, '#2dd4bf', 2.2);      // Adaptive
 
@@ -1089,8 +1150,9 @@
     ctx.textAlign = 'left'; ctx.textBaseline = 'top';
     ctx.fillText('Summe Warteschlangen (veh)', padL, padT - 18);
     ctx.textAlign = 'right';
-    ctx.fillStyle = '#64748b'; ctx.fillText('■ Fixed', w - padR - 74, padT - 18);
-    ctx.fillStyle = '#2dd4bf'; ctx.fillText('■ Adaptive', w - padR, padT - 18);
+    ctx.fillStyle = '#f5c451'; ctx.fillText('■ Koord.', w - padR - 216, padT - 18);
+    ctx.fillStyle = '#64748b'; ctx.fillText('■ Fixed', w - padR - 146, padT - 18);
+    ctx.fillStyle = '#2dd4bf'; ctx.fillText('■ Adaptiv', w - padR - 72, padT - 18);
   }
 
   function renderCharts() {
@@ -1104,9 +1166,12 @@
     const res = state.result;
     if (!res) { el.textContent = 'Keine Simulation geladen.'; return; }
     const c = res.config || {};
+    const m = res.meta || {};
+    const win = m.time_from ? (' · Fenster ' + m.time_from + '–' + m.time_to +
+      (m.clock_rate > 1 ? ' (Tagesgang komprimiert, Mengen 1:1)' : '')) : '';
     el.textContent = (res.name || res.region) + ' · Determinismus: Seed ' + fmt(c.seed, 0) +
-      ' · Dauer ' + fmt(c.duration_min, 0) + ' min · Profil ' + (c.demand_profile || '–') +
-      ' · dt = 1 s · ' + ((res.meta && res.meta.generated) || '');
+      ' · Dauer ' + fmt(c.duration_min, 0) + ' min' + win +
+      ' · ' + ((res.meta && res.meta.generated) || '');
   }
 
   /* ------------------------------ Transport ------------------------------ */
@@ -1163,22 +1228,26 @@
   }
 
   function bindControls() {
-    const dur = $('ctl-duration'), load = $('ctl-load'), seed = $('ctl-seed'), vph = $('ctl-vph');
+    const load = $('ctl-load'), seed = $('ctl-seed'), vph = $('ctl-vph');
     const prof = $('ctl-scenario'), region = $('ctl-region');
 
     const syncVals = function () {
-      if ($('val-duration')) $('val-duration').textContent = dur.value;
       if ($('val-load')) $('val-load').textContent = Number(load.value).toFixed(2);
       if ($('val-seed')) $('val-seed').textContent = seed.value;
       if ($('val-vph')) $('val-vph').textContent = vph.value;
-      [dur, load, seed, vph].forEach(setRangeFill);
+      [load, seed, vph].forEach(setRangeFill);
     };
 
-    // sliders + profile: only mark dirty (no auto-run)
-    [dur, load, seed, vph].forEach(function (el) {
+    // sliders: only mark dirty (no auto-run)
+    [load, seed, vph].forEach(function (el) {
       el.addEventListener('input', function () { syncVals(); markDirty(); });
     });
-    prof.addEventListener('change', function () { syncVals(); markDirty(); });
+    // Szenario setzt das Zeitfenster vor; Fenster-Änderungen markieren dirty
+    prof.addEventListener('change', function () { syncVals(); applyScenarioPreset(); markDirty(); });
+    ['ctl-dow', 'ctl-time-from', 'ctl-time-to'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.addEventListener('change', function () { updateTimeHint(); markDirty(); });
+    });
     ['ctl-mix', 'ctl-tsp'].forEach(function (id) {
       const el = document.getElementById(id);
       if (el) el.addEventListener('change', markDirty);
@@ -1262,11 +1331,17 @@
     bindAddRegion();
     initKpiView();
     initTheme();
+    applyScenarioPreset();      // Zeitfenster passend zum Start-Szenario
     if (window.SFAsk) SFAsk.init({
       fetchJSON: fetchJSON,
       apiFetch: apiFetch,
       context: askContext,
       resultSentence: resultSentence,
+      suggestions: [
+        'Was bringt die grüne Welle in diesem Gebiet?',
+        'Warum schlägt Tuned Adaptiv hier teils?',
+        'Was passiert bei doppelter Nachfrage?',
+      ],
     });
     const speakBtn = $('btn-speak-result');
     if (speakBtn) speakBtn.addEventListener('click', function () { SFAsk.speakResult(); });

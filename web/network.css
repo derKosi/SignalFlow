@@ -84,6 +84,11 @@
   display:grid; grid-template-columns:repeat(auto-fit, minmax(165px, 1fr));
   gap:16px 18px; align-items:end;
 }
+/* Zeitfenster braucht Platz: 2 Spalten, eine Zeile, kein Umbrechen */
+.net-controls .control{ min-width:0; }
+.net-controls .control select{ width:100%; max-width:100%; }
+.net-controls .control.time-control{ grid-column: span 2; }
+.net-controls .time-row{ flex-wrap:nowrap; }
 .run-row{ display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-top:16px; }
 .run-hint{ color:var(--faint); font-size:12px; }
 #btn-run.busy .btn-label::after{ content:" …"; }

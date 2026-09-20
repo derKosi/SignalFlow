@@ -13,6 +13,10 @@
  *                                requests so the server narrates the district
  *                                run on screen instead of the last junction.
  *   opts.resultSentence()      – spoken one-liner for "Ergebnis vorlesen"
+ *   opts.suggestions: [q, …]   – one-click example questions (chips)
+ *   opts.computeAnswer(q)      – optional local answer for specific questions
+ *                                (computed from on-screen data, no server round
+ *                                trip); return null to fall through to the API
  *
  * The panel owns every #ask-* DOM id and remembers the last answer for TTS.
  * ==========================================================================*/
@@ -111,6 +115,17 @@
   async function askExplain() {
     const q = $('ask-input').value.trim();
     if (!q) return;
+    // locally computed answers first (deterministic, from on-screen data)
+    const local = (opts.computeAnswer && opts.computeAnswer(q)) || null;
+    if (local) {
+      answer = local.answer;
+      $('ask-answer').textContent = answer;
+      renderAskSteps(local.steps || [], null);
+      const src = $('ask-source');
+      src.className = 'source-pill local';
+      src.textContent = local.source || 'Analyse · lokal berechnet';
+      return;
+    }
     const btn = $('ask-send');
     btn.disabled = true; btn.textContent = 'Denkt…';
     $('ask-answer').textContent = '…';
@@ -238,6 +253,28 @@
     });
   }
 
+  // one-click example questions as chips above the input row
+  function renderChips() {
+    if (!opts || !Array.isArray(opts.suggestions) || !opts.suggestions.length) return;
+    const row = document.querySelector('.ask-row');
+    if (!row || row.parentNode.querySelector('.ask-chips')) return;
+    const box = document.createElement('div');
+    box.className = 'ask-chips';
+    opts.suggestions.forEach((q) => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ask-chip';
+      b.textContent = q;
+      b.title = q;
+      b.addEventListener('click', () => {
+        $('ask-input').value = q;
+        askExplain();
+      });
+      box.appendChild(b);
+    });
+    row.parentNode.insertBefore(box, row);
+  }
+
   function bind() {
     if (!$('ask-send')) return;                 // page has no ask panel
     $('ask-send').addEventListener('click', askExplain);
@@ -248,6 +285,7 @@
     }
     $('ask-speak').addEventListener('click', speakAnswer);
     setupMic();
+    renderChips();
     setAskMode('agent');
   }
 
