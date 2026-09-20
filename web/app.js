@@ -404,7 +404,7 @@
           <div class="row pol-${p.key}"><span class="tag" title="${p.info}">${p.label}</span>` +
         (p.key === 'fixed'
           ? '<i class="dlt"></i>'
-          : `<i class="dlt" data-kpi="${m.key}-${p.key}-delta" title="Δ gegenüber Fixed — positiv = besser">–</i>`) +
+          : `<i class="dlt" data-kpi="${m.key}-${p.key}-delta" title="Änderung gegenüber Fixed; Farbe zeigt besser (grün) / schlechter (rot)">–</i>`) +
         `<b data-kpi="${m.key}-${p.key}">–</b></div>`).join('');
       card.innerHTML = `
         <header><h3 title="${m.info}">${m.title}</h3><span class="unit">${m.unit}</span></header>
@@ -423,7 +423,7 @@
     const head = KPI_META.map((m) =>
       `<th colspan="2" title="${m.info}">${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
     const subHeads = KPI_META.map(() =>
-      '<th class="sub">Wert</th><th class="sub" title="Veränderung gegenüber Fixed — positiv = besser (bei „weniger ist besser“-Kennzahlen bedeutet + also einen kleineren Wert)">Δ (+ = besser)</th>').join('');
+      '<th class="sub" title="Klassische relative Änderung gegenüber Fixed (neu − alt) / alt. Die Farbe bewertet: grün = besser, rot = schlechter — bei „weniger ist besser“-Kennzahlen ist ein negatives Δ also gut.">Δ vs Fixed</th>').join('');
     const bodyRows = pols.map((p) => {
       const cells = KPI_META.map((m) => {
         const dlt = p.key === 'fixed'
@@ -475,17 +475,29 @@
         all(m.key + '-' + p.key).forEach((el) => el.classList.toggle('best', v === best.v));
       }
 
-      // Δ vs Fixed (signed: > 0 always means "better than Fixed")
+      // Δ vs Fixed: klassische relative Änderung (neu − alt)/alt — das Vorzeichen
+      // ist die reine Wertänderung ("−" = kleiner); besser/schlechter zeigt die
+      // Farbe (grün/rot), damit "kleiner ist besser" nicht gegen das Pluszeichen
+      // kämpft.
       const fv = (vals.find((x) => x.p.key === 'fixed') || {}).v;
       for (const { p, v } of vals) {
         if (p.key === 'fixed') continue;
         all(m.key + '-' + p.key + '-delta').forEach((dEl) => {
           if (!fv) { dEl.textContent = 'n/a'; return; }
-          const pct = m.dir === 'up' ? (v - fv) / fv * 100 : (fv - v) / fv * 100;
-          dEl.textContent = (pct >= 0 ? '+' : '−') + fmt(Math.abs(pct), 1) + ' %';
-          dEl.title = pct >= 0
-            ? 'Verbesserung gegenüber Fixed'
-            : 'Verschlechterung gegenüber Fixed';
+          const pct = (v - fv) / fv * 100;
+          const better = m.dir === 'up' ? pct > 0 : pct < 0;
+          const worse = m.dir === 'up' ? pct < 0 : pct > 0;
+          if (Math.abs(pct) < 0.05) {
+            dEl.textContent = '±0,0 %';
+          } else {
+            dEl.textContent = (pct > 0 ? '+' : '−') + fmt(Math.abs(pct), 1) + ' %';
+          }
+          dEl.classList.toggle('good', better);
+          dEl.classList.toggle('bad', worse);
+          dEl.classList.toggle('mid', false);
+          dEl.title =
+            (better ? 'Verbesserung' : worse ? 'Verschlechterung' : 'praktisch unverändert') +
+            ` gegenüber Fixed — Vorzeichen = reine Wertänderung (${m.dir === 'up' ? 'höher ist besser' : 'kleiner ist besser'}; Farbe zeigt besser/schlechter)`;
         });
       }
     }
@@ -1011,7 +1023,8 @@
   }
 
   function chartPolicies() {
-    return POLICY_META.filter((p) => state.summaries[p.key]);
+    // dieselben Schalter wie die Viewer-Canvases: Filter gilt überall
+    return POLICY_META.filter((p) => state.summaries[p.key] && state.visible[p.key]);
   }
 
   function drawBars(canvas) {
@@ -1993,7 +2006,8 @@
       });
     });
 
-    // strategy toggles: show/hide each controller's canvas, "Alle" = all on
+    // strategy toggles: show/hide each controller's canvas + chart series,
+    // "Alle" = all on
     document.querySelectorAll('.policy-modes .pol-btn').forEach((b) => {
       b.addEventListener('click', () => {
         const pol = b.dataset.pol;
@@ -2006,6 +2020,7 @@
           if (!POLICY_META.some((p) => state.visible[p.key])) state.visible[pol] = true;
         }
         syncPolicyButtons();
+        renderCharts();
       });
     });
 
