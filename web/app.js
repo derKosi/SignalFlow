@@ -1312,11 +1312,14 @@
     }
     const top = Object.keys(targets).sort((a, b) => targets[b] - targets[a])[0];
     const span = state.duration / 3600;
+    const cfgc = (state.result && state.result.config) || {};
     const rows = [
       ['Phasenwechsel', fmt(decs.length, 0) + (span >= 1
         ? ' · ' + fmt(decs.length / span, 1) + '/h' : '')],
       ['Häufigstes Ziel', (PHASE_LABEL[top] || top) + ' (' + fmt(targets[top], 0) + '×)'],
       ['Früh beendet (leere Phase)', fmt(earlyExit, 0) + '×'],
+      ['Min-/Max-Grün', `${cfgc.min_green != null ? cfgc.min_green : 24} / ${cfgc.max_green != null ? cfgc.max_green : 50} s`],
+      ['Gelb + Räumrot je Wechsel', `${cfgc.yellow != null ? cfgc.yellow : 3} + ${cfgc.all_red != null ? cfgc.all_red : 1} s`],
       ['Ø Wartezeit beim Wechsel', (() => {
           const waits = decs.map((d) => {
             const m = /worst wait (\d+)/.exec(d.reason || '');
@@ -1429,12 +1432,16 @@
         'nicht (offen benannt). Ein eigener Plan je Tageszeit, weil ein Plan, der zur ' +
         'Rush passt, um 14 Uhr nur verschwendetes Grün produziert (und umgekehrt).</p>';
     } else {
+      const cfgc = (state.result && state.result.config) || {};
       html += '<table class="plan-table"><thead><tr><th>Phase</th><th>Grün</th></tr></thead><tbody>' +
         phases.map((ph, i) =>
           `<tr><td>${PHASE_LABEL[ph] || ph}</td><td>${(plan.greens || [])[i] != null ? (plan.greens || [])[i] + 's' : '–'}</td></tr>`).join('') +
         '</tbody></table>';
       html += `<p class="plan-line">Zyklus <b>${plan.cycle_s}s</b>` +
         (plan.y_total != null ? ' · Flussverhältnis Y=' + plan.y_total : '') +
+        ` · Gelb ${cfgc.fixed_yellow != null ? cfgc.fixed_yellow : 3} s` +
+        ` · Räumrot ${cfgc.fixed_all_red != null ? cfgc.fixed_all_red : 1} s` +
+        ` · Mindestgrün 10 s` +
         (plan.offset_s != null && !plan.main_axis ? ' · Offset ' + plan.offset_s + 's' : '') +
         '</p>';
     }
