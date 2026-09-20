@@ -498,3 +498,25 @@ class ExplainFallbackVoiceTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class DeterministicVoiceContentTest(unittest.TestCase):
+    """solo closes with a recommendation, panel with a trust verdict."""
+
+    def test_solo_has_recommendation_panel_has_trust(self):
+        tb = ToolBox()
+        q = "Was passiert in den Ferien mit 15 % Lkw?"
+        solo = agent_run_answer(tb, q, "solo")
+        panel = agent_run_answer(tb, q, "panel")
+        self.assertIn("Empfehlung:", solo)
+        self.assertNotIn("Vertrauen:", solo)
+        self.assertIn("Vertrauen:", panel)
+        self.assertIn("Analyse (Analyst):", panel)
+        # the two voices must not collapse into the same text
+        self.assertNotEqual(solo, panel)
+
+
+def agent_run_answer(tb: ToolBox, question: str, mode: str) -> str:
+    from signalflow import agent as A
+    out = A._deterministic_answer(question, tb, mode)
+    return out["answer"]

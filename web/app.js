@@ -2099,11 +2099,23 @@
       context: function () { return { kind: 'junction' }; },
       resultSentence: buildResultSentence,
       computeAnswer: computeLocalAnswer,
-      suggestions: [
-        'Warum gewinnt Adaptiv im Durchschnitt, verliert aber zur Stoßzeit gegen Tuned?',
-        'Wo sieht man die grüne Welle?',
-        'Was passiert in den Ferien mit 15 % Lkw?',
-      ],
+      suggestions: {
+        agent: [
+          'Was passiert in den Ferien mit 15 % Lkw?',
+          'Kreisverkehr oder Ampel — was ist schneller?',
+          'Was bringt Bus-Priorität im Berufsverkehr?',
+        ],
+        panel: [
+          'Prüfe: Gewinnt Adaptiv immer gegen den festen Fahrplan?',
+          'Was passiert in den Ferien mit 15 % Lkw?',
+          'Warum ist Koordiniert hier schlechter als Fixed?',
+        ],
+        explain: [
+          'Warum wechselt die Phase so oft?',
+          'Was passiert in den Ferien mit 15 % Lkw?',
+          'Warum gewinnt Adaptiv im Durchschnitt, verliert aber zur Stoßzeit gegen Tuned?',
+        ],
+      },
     });
     if ($('btn-speak-result')) $('btn-speak-result').addEventListener('click', () => SFAsk.speakResult());
 

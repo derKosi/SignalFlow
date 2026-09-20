@@ -61,6 +61,10 @@ with zero runtime dependencies).
 * Close the detector loop (feed as feedback, SCOOT/SCATS-style).
 * Mobile/responsive pass; i18n strings; Dockerfile; PyPI-style release.
 * Multi-corridor joint optimisation + transit routes (bus lines as entities).
+* **Fortlaufender Chat**: das Ask-Panel ist heute stateless (jede Frage
+  standalone; nur `last_result` wird geteilt). Ein Konversationsgedächtnis
+  (Frage-Verlauf im Panel + letzte Nachrichten als Kontext für das LLM)
+  wäre der nächste Ausbau — lohnt erst, wenn ein LLM-Key angebunden ist.
 
 ---
 

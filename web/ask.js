@@ -92,6 +92,7 @@
     }
     const input = $('ask-input');
     if (input) input.placeholder = ASK_PLACEHOLDER[askMode];
+    renderChips();
   }
 
   // Build (endpoint, body) for the current mode, carrying the page context
@@ -253,14 +254,24 @@
     });
   }
 
-  // one-click example questions as chips above the input row
+  // one-click example questions as chips above the input row; per mode if the
+  // page provides an object {agent:[...], panel:[...], explain:[...]}
+  function suggestionsFor(mode) {
+    if (!opts || !opts.suggestions) return [];
+    if (Array.isArray(opts.suggestions)) return opts.suggestions;
+    return opts.suggestions[mode] || opts.suggestions.agent || [];
+  }
+
   function renderChips() {
-    if (!opts || !Array.isArray(opts.suggestions) || !opts.suggestions.length) return;
     const row = document.querySelector('.ask-row');
-    if (!row || row.parentNode.querySelector('.ask-chips')) return;
+    if (!row) return;
+    const old = row.parentNode.querySelector('.ask-chips');
+    if (old) old.remove();
+    const list = suggestionsFor(askMode);
+    if (!list.length) return;
     const box = document.createElement('div');
     box.className = 'ask-chips';
-    opts.suggestions.forEach((q) => {
+    list.forEach((q) => {
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'ask-chip';
@@ -285,7 +296,6 @@
     }
     $('ask-speak').addEventListener('click', speakAnswer);
     setupMic();
-    renderChips();
     setAskMode('agent');
   }
 

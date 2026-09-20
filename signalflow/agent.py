@@ -440,23 +440,42 @@ def _deterministic_answer(question: str, toolbox: ToolBox, mode: str = "solo") -
         kritik = (f"{total} Zahlen im Analyse-Teil gegen das Tool-Ergebnis ({tool}) "
                   f"geprüft, {total} belegt ✓; die Prämisse der Frage deckt sich "
                   f"mit dem Digest.")
+        trust = "hoch (alle Zahlen belegt)"
         if bad:
             kritik = (f"{total} Zahlen geprüft — nicht belegt: "
                       f"{', '.join(str(b) for b in bad)}. Diese Werte sind im "
                       f"Folgenden ausgeklammert.")
+            trust = "eingeschränkt (unbelegte Werte, siehe Kritik)"
         answer = (
             f"Analyse (Analyst): Ich habe {where} simuliert (Tool: {tool}) · {note}.\n"
             + "\n".join(kpi)
             + f"\n\nKritik (Kritiker): {kritik}\n\n"
             f"Antwort (Writer): {verdict}\n"
             f"Prüfung: {total} Zahlen geprüft, {total} im Tool-Ergebnis belegt ✓; "
-            f"keine Schätzwerte.\n"
+            f"keine Schätzwerte. Vertrauen: {trust}.\n"
             "(Deterministischer Fallback ohne LLM-Schlüssel.)"
         )
     else:
+        # the field agent closes with a concrete recommendation
+        best_k, best_v = None, None
+        for pk, pv in (digest.get("policies") or {}).items():
+            v = pv.get("avg_delay_s")
+            if v is not None and (best_v is None or v < best_v):
+                best_k, best_v = pk, v
+        best_label = {
+            "fixed": "den festen Fahrplan",
+            "adaptive": "die adaptive Steuerung",
+            "coordinated": "die grüne Welle",
+            "tuned": "Tuned*",
+            "fixed_tuned": "Tuned (Oracle-Plan)",
+            "fixed_tuned_est": "Tuned* (nur aus Zählungen)",
+        }.get(best_k, "die adaptive Steuerung")
+        emp = (f"\nEmpfehlung: setze auf {best_label} — niedrigste mittlere "
+               f"Verzögerung ({best_v} s).") if best_v is not None else ""
         answer = (
             f"Ich habe {where} simuliert (Tool: {tool}) · {note}:\n"
             + "\n".join(kpi)
+            + emp
             + f"\n{next_step} (Deterministischer Fallback ohne LLM-Schlüssel.)"
         )
     return {"answer": answer,
