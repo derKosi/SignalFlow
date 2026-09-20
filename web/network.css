@@ -56,8 +56,8 @@
 .delta.coordinated.good{ color:var(--good); border-color:rgba(34,197,94,.4); }
 .delta.coordinated.mid{ color:var(--yellow); }
 .delta.coordinated.bad{ color:var(--bad); border-color:rgba(239,68,68,.4); }
-.kpi .row.tuned-est b{ color:#7fd1a8; }
-.kpi .row.tuned-est .dlt{ color:#7fd1a8; }
+.kpi .row.tuned-est b{ color:#a78bfa; }
+.kpi .row.tuned-est .dlt{ color:#a78bfa; }
 .kpi .tag[title]{ cursor:help; }
 .region-row{
   display:flex; flex-wrap:wrap; gap:16px 20px; align-items:flex-end;
