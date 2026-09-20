@@ -491,7 +491,7 @@ def _cross4_spec(permissive: bool) -> dict:
                 "signalized": True, "capacity": "signal",
                 "permissive": {("N", "L"), ("S", "L"), ("E", "L"), ("W", "L")}}
     return {"label": "Kreuzung (4 Arme, geschützte Linksabbieger)", "arms": arms,
-            "movements": moves, "phases": list(PHASES), "fixed_greens": [36, 10, 32, 8],
+            "movements": moves, "phases": list(PHASES), "fixed_greens": [36, 10, 32, 12],
             "signalized": True, "capacity": "signal", "permissive": set()}
 
 
@@ -962,10 +962,13 @@ class CoordinatedController(FixedTimeController):
 # produce their own Webster plan, switched by the clock.
 TUNED_BUCKETS = ((6, 10), (10, 15), (15, 21))
 
-# Realistic minimum green for every phase (RiLSA-Praxis ~10 s vehicles; less
-# would starve side streets and ignore pedestrian crossing + clearance times).
+# Realistic minimum green for every phase. RiLSA 2015 (still the valid German
+# rule set): vehicle streams need at least 10 s green; pedestrians get >= 5 s
+# plus clearance time (separate pedestrian phases are not modelled — disclosed).
 # Computed plans may never go below this, even under coordination bias.
 MIN_GREEN_S = 10
+# RiLSA cycle range: 30-90 s usual, at most 120 s — Webster cycles are clamped
+MAX_CYCLE_S = 120
 
 
 def _tuned_bucket(h: float) -> int:
@@ -1038,7 +1041,7 @@ class TunedController(FixedTimeController):
             equal = max(len(phases) * MIN_GREEN_S, 60 - lost) / len(phases)
             greens = [int(round(equal))] * len(phases)
         else:
-            cycle = int(min(150, max(40, (1.5 * lost + 5) / (1.0 - min(0.95, Y)))))
+            cycle = int(min(MAX_CYCLE_S, max(40, (1.5 * lost + 5) / (1.0 - min(0.95, Y)))))
             available = max(len(phases) * MIN_GREEN_S, cycle - lost)
             greens = _int_split([max(float(MIN_GREEN_S), available * yi / Y)
                                  for yi in y], available, floor=MIN_GREEN_S)
@@ -1269,7 +1272,7 @@ def run_scenario(cfg_dict: dict | None = None, frame_target: int = 400) -> dict:
         # against the unsignalised roundabout on identical demand
         sig = Config.from_dict({**cfg.to_dict(), "junction_type": "cross4",
                                 "permissive_left": False})
-        sig.fixed_greens = [36, 10, 32, 8]
+        sig.fixed_greens = [36, 10, 32, 12]
         controllers = {"fixed": FixedTimeController(), "adaptive": RoundaboutController()}
         runs = {k: simulate(sig if k == "fixed" else cfg, arrivals, c, frame_target, warmup)
                 for k, c in controllers.items()}

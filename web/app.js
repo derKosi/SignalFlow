@@ -58,7 +58,7 @@
       S: { T: 760, L: 150, R: 130 }, W: { T: 560, L: 90, R: 80 },
     },
     lanes: { T: 2, L: 1, R: 1 },
-    fixed_greens: [36, 10, 32, 8],
+    fixed_greens: [36, 10, 32, 12],
     min_green: 24, max_green: 50, switch_hysteresis: 3.0,
   };
 
@@ -1423,10 +1423,11 @@
         'Tageszeit wird die stärkste Stunde (Spitzenstunde) bestimmt. Daraus folgt je Phase ' +
         'das Flussverhältnis y = Nachfrage / Kapazität; der Webster-Zyklus ' +
         'C = (1,5·L + 5)/(1 − Y) und die Grünverteilung ∝ y ergeben sich direkt daraus — ' +
-        'die Stoßphase bekommt automatisch den größten Grünanteil. <b>Mindestgrün 10 s je ' +
-        'Phase</b> ist immer garantiert (Fußgänger- und Räumzeiten, kein Sternen von ' +
-        'Nebenrichtungen). Ein eigener Plan je Tageszeit, weil ein Plan, der zur Rush ' +
-        'passt, um 14 Uhr nur verschwendetes Grün produziert (und umgekehrt).</p>';
+        'die Stoßphase bekommt automatisch den größten Grünanteil. Randbedingungen nach ' +
+        'RiLSA: <b>Mindestgrün 10 s je Fahrzeugphase</b>, Umlaufzeit max. 120 s; zwischen ' +
+        'allen Phasen Gelb 3 s + Räumrot 1 s. Separate Fußgängerphasen modellieren wir ' +
+        'nicht (offen benannt). Ein eigener Plan je Tageszeit, weil ein Plan, der zur ' +
+        'Rush passt, um 14 Uhr nur verschwendetes Grün produziert (und umgekehrt).</p>';
     } else {
       html += '<table class="plan-table"><thead><tr><th>Phase</th><th>Grün</th></tr></thead><tbody>' +
         phases.map((ph, i) =>
