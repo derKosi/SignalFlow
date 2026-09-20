@@ -211,7 +211,8 @@ die Steuerungslogik ist der Forschungsgegenstand.
 ## Werkzeuge & Danke
 
 **AI-Disclosure.** Die Entwicklung erfolgte agentisch unterstützt: Claude-Code-Harness
-(Modell **GLM-5.3-flash**), daneben **Pi Harness** und **AutoClaw Harness**. Jede Zahl
+(Modelle **GLM-5.3** und **GLM-5.3-flash**), daneben **Pi Harness** und
+**AutoClaw Harness**. Jede Zahl
 dieses Writeups stammt aus Simulator-Läufen; die Zahlengate im Code verwerfen
 nicht gedeckte Angaben.
 

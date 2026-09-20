@@ -202,8 +202,8 @@ logic is the research object.
 
 ## Tools & thanks
 
-**AI disclosure.** Development was agent-assisted: Claude Code harness (model
-**GLM-5.3-flash**), plus **Pi Harness** and **AutoClaw Harness**. Every number in
+**AI disclosure.** Development was agent-assisted: Claude Code harness (models
+**GLM-5.3** and **GLM-5.3-flash**), plus **Pi Harness** and **AutoClaw Harness**. Every number in
 this writeup comes from simulator runs; in-code number gates reject unsupported
 claims.
 
