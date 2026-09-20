@@ -1,13 +1,13 @@
 # Roadmap / open TODOs
 
-Consolidated status and next steps. Updated 2026-09-19 (55/55 tests green, server runs
+Consolidated status and next steps. Updated 2026-09-20 (115/115 tests green, server runs
 with zero runtime dependencies).
 
 ## Timeline (verified against the platform API)
 
 | | |
 |---|---|
-| Now | 2026-09-18 |
+| Now | **2026-09-20 (deadline day)** |
 | **Challenge deadline** | 2026-09-20 |
 | **Submission window closes** | **2026-09-21 23:30 CEST** |
 | Public voting | 2026-09-20 09:00 → 2026-09-21 17:00 CEST |
@@ -23,10 +23,10 @@ with zero runtime dependencies).
 |---|---|---|---|---|
 | P0.1 | **Record the 2–3 min demo video** from [DEMO.md](../DEMO.md) | human | 1–2 h | video uploaded, link ready |
 | P0.2 | **Submit on Devpost** using [SUBMISSION.md](../SUBMISSION.md) (paste, add links, add both baseline numbers) | human | 30 min | submission confirmed |
-| P0.3 | **Visual smoke-test the dashboards in a browser** (junction: right-hand traffic, turning paths, T-junction, roundabout; district: map, presets, live-add) | human | 20 min | no layout/logic bugs, or bugs logged |
+| P0.3 | **Visual smoke-test the dashboards in a browser** (junction: right-hand traffic, turning paths, T-junction, roundabout; district: map, presets, live-add) | human + agent | 20 min | **largely done** — agent verified every round via Playwright (layout probes, pixel scans, synthetic events) on 2026-09-19/20; human feel-test ongoing, findings fixed immediately |
 | P0.4 | **Decide the licence** against the real rules (the `/rules` page was not fetchable here) — see [NOTICE.md](../NOTICE.md) | human | 15 min | licence + AI-disclosure wording confirmed |
 | P0.5 | **Verify repo is public/accessible to judges** (submission requires judge access) | human | 10 min | repo/demo link works for a stranger |
-| P0.6 | Fix any bug P0.3 finds (drawing/geometry/labels) | agent | 1–3 h | re-tested by human |
+| P0.6 | Fix any bug P0.3 finds (drawing/geometry/labels) | agent | 1–3 h | **done repeatedly** — every finding from the browser rounds was fixed same-session (layout, roundabout, min-green realism, KPI semantics) |
 | P0.7 | **Optional: live demo** — the stdlib server deploys anywhere Python runs (Render/Fly.io free tier, or a VPS + subdomain e.g. demo.kosit.de). Keys optional (offline fallback works); precompute cache before going live. Decide 2026-09-20 morning: live link lowers the voter barrier (voting starts 09:00) — but video + GitHub + writeup is sufficient per the rules | human + agent | 30–60 min | live URL reachable, or decision documented |
 
 ## P1 — high value, do if time remains before the deadline
@@ -34,7 +34,7 @@ with zero runtime dependencies).
 | # | Task | Status |
 |---|---|---|
 | P1.1 | **Make adaptive beat `fixed_tuned`** | **partial → mostly closed** — measured-split narrowed the gap to −8.1 %/−7.9 %; count-based OD (P1.5) now recovers 80–100 % of the oracle's gain *from detectors alone*; opt-in Webster cycle lets adaptive **beat the oracle on Riem (+8.2 %) and Köln (+2.5 %)**. Remaining: adaptive beating the oracle *by default* on every region |
-| P1.2 | **Live test sponsor paths with real keys** | open (needs keys) |
+| P1.2 | **Live test sponsor paths with real keys** | partially open — ElevenLabs key is stored (`.env` as `VOICEOVER_ELEVENLABS_API_KEY`, deliberately NOT wired into the app; free quota reserved for the video voice-over; flash v2.5 + premade voices verified working). Featherless key still missing. In-app TTS stays offline for the demo unless the user enables it |
 | P1.3 | **Claim sponsor promo codes** | open (human) |
 | P1.4 | **Calibrate with real data** | open (needs a dataset) |
 | P1.5 | **OD-based demand from counts** | **done** — stop-line counts → Richardson-Lucy OD → `fixed_tuned_est` in every district payload (+ “Tuned\*” dashboard row, `tools/od_experiment.py`, 5 tests). OD itself stays non-identifiable; split ratios are what matters (median err 0.0 pp) |
@@ -70,7 +70,10 @@ with zero runtime dependencies).
 2. Saturation flow / PCE are defaults, not calibrated (Tarko: ~8–10 % error).
 3. District demand is still a synthetic gravity model; what counts deliver is the
    **tuned plan** (`fixed_tuned_est`) — the demand *generator* itself remains synthetic.
-4. Roundabout capacity is a rough analytic estimate; no gap acceptance.
+4. Roundabout capacity is a rough analytic estimate; no gap acceptance. Separate
+   pedestrian phases (own min-green + clearance per RiLSA) are not modelled —
+   the 10 s vehicle minimum green is applied instead and the constraint is
+   shown in the plan cards.
 5. Adaptive **beats the demand-oracle only with opt-in Webster** (Riem, Köln) — the
    default policy stays −8 %/−5 % behind (P1.1 residual).
 6. The dashboards were originally never rendered in a real browser; since

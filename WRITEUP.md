@@ -188,6 +188,11 @@ Strategie-Wahl pro Tag direkt ablesbar würde.
 
 ## 8. Literatur
 
+> Eine uns bekannte Modellgrenze, offen benannt: Separate Fußgängerphasen
+> (eigene Mindestfreigabe ≥ 5 s plus Räumzeit nach RiLSA) modellieren wir
+> nicht — die berechneten Pläne garantieren stattdessen 10 s Mindestgrün je
+> Fahrzeugphase und begrenzen die Umlaufzeit auf 120 s.
+
 > Transparenz: Diese Literaturverankerung entstand **nach** der ersten
 > funktionierenden Version. Wir zitieren, worauf unser Design sich stützt, und
 > markieren, wo wir vereinfachen. Unsere Zahlen sind Modellausgaben, keine
