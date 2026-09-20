@@ -422,7 +422,7 @@
     const head = KPI_META.map((m) =>
       `<th colspan="2" title="${m.info}">${m.title}${m.unit ? ' <span class="unit">' + m.unit + '</span>' : ''}</th>`).join('');
     const subHeads = KPI_META.map(() =>
-      '<th class="sub" title="Klassische relative Änderung gegenüber Fixed (neu − alt) / alt. Die Farbe bewertet: grün = besser, rot = schlechter — bei „weniger ist besser“-Kennzahlen ist ein negatives Δ also gut.">Δ vs Fixed</th>').join('');
+      '<th class="sub">Wert</th><th class="sub" title="Klassische relative Änderung gegenüber Fixed (neu − alt) / alt. Die Farbe bewertet: grün = besser, rot = schlechter — bei „weniger ist besser“-Kennzahlen ist ein negatives Δ also gut.">Δ vs Fixed</th>').join('');
     const bodyRows = pols.map((p) => {
       const cells = KPI_META.map((m) => {
         const dlt = p.key === 'fixed'
@@ -484,13 +484,13 @@
         all(m.key + '-' + p.key + '-delta').forEach((dEl) => {
           if (!fv) { dEl.textContent = 'n/a'; return; }
           const pct = (v - fv) / fv * 100;
-          const better = m.dir === 'up' ? pct > 0 : pct < 0;
-          const worse = m.dir === 'up' ? pct < 0 : pct > 0;
-          if (Math.abs(pct) < 0.05) {
-            dEl.textContent = '±0,0 %';
-          } else {
-            dEl.textContent = (pct > 0 ? '+' : '−') + fmt(Math.abs(pct), 1) + ' %';
-          }
+          // neutral, wenn die ANGEZEIGTE Zahl 0,0 wäre (kein rot/grün auf Rundung)
+          const shown = Math.round(pct * 10) / 10;
+          const neutral = shown === 0;
+          const better = !neutral && (m.dir === 'up' ? shown > 0 : shown < 0);
+          const worse = !neutral && !better;
+          dEl.textContent = neutral ? '±0,0 %'
+            : (shown > 0 ? '+' : '−') + fmt(Math.abs(shown), 1) + ' %';
           dEl.classList.toggle('good', better);
           dEl.classList.toggle('bad', worse);
           dEl.classList.toggle('mid', false);
@@ -1670,6 +1670,110 @@
   function show(el, text) { if (el) { if (text) el.innerHTML = text; el.classList.remove('hidden'); } }
   function hide(el) { if (el) el.classList.add('hidden'); }
 
+  /* -------------------- PDF-Abhandlung (Bericht) ------------------------- */
+  // Din A4-Bericht der laufenden Simulation: Randbedingungen aus den Controls,
+  // KPI-Tabelle ueber die sichtbaren Strategien, Charts + Strategien-Bilder.
+  function exportReportPdf() {
+    if (!state.result || !window.SFReport) return;
+    const res = state.result;
+    const selText = (id) => {
+      const el = document.getElementById(id);
+      return el && el.selectedIndex >= 0 ? el.options[el.selectedIndex].text : '–';
+    };
+    const val = (id) => { const el = document.getElementById(id); return el ? el.value : '–'; };
+    const pols = activePolicies();
+    const vis = visiblePolicies();
+    const meta = res.meta || {};
+    const spanMin = Math.round(state.duration / 60);
+    const spanTxt = spanMin >= 120 ? Math.round(spanMin / 6) / 10 + ' h' : spanMin + ' min';
+    const win = meta.time_from
+      ? meta.time_from + '–' + meta.time_to + ' Uhr · ' + spanTxt
+      : spanTxt;
+
+    const conditions = [
+      ['Szenario', selText('ctl-scenario')],
+      ['Zeitraum', win + ' · Warm-up ' + (meta.warmup_min || 0) + ' min (nicht gewertet)'],
+      ['Kreuzung', (res.junction && res.junction.label) || selText('ctl-junction')],
+      ['Fahrzeugmix', selText('ctl-mix')],
+      ['Bus-Priorität', val('ctl-tsp') === 'on' ? 'an (TSP)' : 'aus'],
+      ['Last', '×' + Number(val('ctl-load')).toFixed(2).replace('.', ',')],
+      ['Strategien', vis.map((p) => p.label).join(', ')],
+      ['Datenquelle', val('ctl-source') === 'csv' ? 'Sensor-Feed (CSV)' : 'Modell (Poisson) · Seed ' + val('ctl-seed')],
+    ];
+
+    const rows = [['Kennzahl', ...pols.map((p) => p.label)]];
+    for (const m of KPI_META) {
+      rows.push([
+        m.title + (m.unit ? ' (' + m.unit + ')' : ''),
+        ...pols.map((p) => fmt(m.get(state.summaries[p.key]), m.dec)),
+      ]);
+    }
+
+    // Charts + sichtbare Strategien als JPEG (2x2-Composite mit Labels)
+    const jpeg = (canvas) => canvas.toDataURL('image/jpeg', 0.92);
+    const fullW = PAGE_W_NB; // 503pt nutzbare Breite
+    const images = [];
+    const bars = $('chart-bars'), delay = $('chart-delay');
+    if (bars && bars.width) images.push({
+      caption: 'Kennzahlen im Vergleich', dataUrl: jpeg(bars),
+      w: fullW, h: fullW * bars.height / bars.width, px: bars.width, py: bars.height });
+    if (delay && delay.width) images.push({
+      caption: 'Verlauf über die Zeit', dataUrl: jpeg(delay),
+      w: fullW, h: fullW * delay.height / delay.width, px: delay.width, py: delay.height });
+    if (vis.length) {
+      images.push(strategyComposite(vis));
+    }
+
+    const now = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    const stamp = now.getFullYear() + pad(now.getMonth() + 1) + pad(now.getDate()) +
+      '-' + pad(now.getHours()) + pad(now.getMinutes());
+    const spec = {
+      title: 'SignalFlow — Simulationsbericht',
+      subtitle: 'Kreuzungs-Dashboard · erstellt am ' +
+        now.toLocaleDateString('de-DE') + ' ' + now.toLocaleTimeString('de-DE') +
+        ' · ' + (meta.generated || ''),
+      sections: [{ heading: 'Randbedingungen', lines: conditions }],
+      table: { heading: 'Kennzahlen im Vergleich', head: rows[0], rows: rows.slice(1) },
+      images: images,
+      footer: '© OpenStreetMap-Mitwirkende (ODbL) · LLM: Featherless · TTS: ElevenLabs · ' +
+        'MunichTech EXPO 2026 · Code: PolyForm Noncommercial 1.0.0 — dynamisch erzeugter ' +
+        'Bericht der laufenden Simulation; Modellgrenzen siehe Writeup.',
+    };
+    SFReport.download(SFReport.build(spec), 'signalflow-bericht-' + stamp + '.pdf');
+  }
+
+  // alle sichtbaren Strategie-Canvases als beschriftetes 2er-Raster-Bild
+  function strategyComposite(vis) {
+    const CW = 480, GAP = 12, LABEL = 26;
+    const cols = Math.min(2, vis.length);
+    const cellW = (CW - GAP * (cols - 1)) / cols;
+    const ref = document.getElementById('canvas-' + vis[0].key);
+    const cellH = Math.round(cellW * ref.height / ref.width);
+    const rows = Math.ceil(vis.length / cols);
+    const off = document.createElement('canvas');
+    off.width = CW * 2;                 // doppelte Aufloesung fuer JPEG-Schaerfe
+    off.height = (cellH + LABEL + GAP) * rows * 2;
+    off.style.width = CW + 'px';
+    const ctx = off.getContext('2d');
+    ctx.fillStyle = '#0a0e13';
+    ctx.fillRect(0, 0, off.width, off.height);
+    ctx.scale(2, 2);
+    ctx.font = '600 12px system-ui, sans-serif';
+    vis.forEach((p, i) => {
+      const cx = (i % cols) * (cellW + GAP);
+      const cy = Math.floor(i / cols) * (cellH + LABEL + GAP);
+      ctx.fillStyle = '#e6edf3';
+      ctx.fillText(p.label, cx + 2, cy + 13);
+      ctx.drawImage(document.getElementById('canvas-' + p.key), cx, cy + LABEL,
+        cellW, cellH);
+    });
+    const w = 503, h = Math.round(off.height / off.width * 503);
+    return { caption: 'Strategien im direkten Vergleich', dataUrl: off.toDataURL('image/jpeg', 0.92),
+             w: w, h: h, px: off.width, py: off.height };
+  }
+  const PAGE_W_NB = 503;
+
   /* ===========================================================================
    * 14) OFFLINE DEMO GENERATOR  (mirrors the backend payload shape)
    * ======================================================================== */
@@ -2122,12 +2226,8 @@
     });
     if ($('btn-speak-result')) $('btn-speak-result').addEventListener('click', () => SFAsk.speakResult());
 
-    // export the first visible intersection view as PNG
-    if ($('btn-export')) $('btn-export').addEventListener('click', () => {
-      const vis = visiblePolicies();
-      const key = vis.length ? vis[0].key : 'fixed';
-      exportCanvas('canvas-' + key, 'signalflow-kreuzung-' + key + '.png');
-    });
+    // export a PDF treatise of the current simulation
+    if ($('btn-export')) $('btn-export').addEventListener('click', exportReportPdf);
 
     // auto-speak toggle
     if ($('chk-autospeak')) $('chk-autospeak').addEventListener('change', (e) => {
