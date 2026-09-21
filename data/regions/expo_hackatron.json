@@ -1,0 +1,431 @@
+{
+ "region": "expo_hackatron",
+ "name": "Hackatron Expo-District (Offizielles Sample)",
+ "bbox": [
+  48.1674,
+  11.5433,
+  48.181,
+  11.5587
+ ],
+ "nodes": [
+  {
+   "id": 100,
+   "lat": 48.1728,
+   "lon": 11.5504,
+   "deg": 8,
+   "signal": true
+  },
+  {
+   "id": 101,
+   "lat": 48.1741,
+   "lon": 11.5478,
+   "deg": 8,
+   "signal": true
+  },
+  {
+   "id": 102,
+   "lat": 48.1765,
+   "lon": 11.5489,
+   "deg": 6,
+   "signal": true
+  },
+  {
+   "id": 103,
+   "lat": 48.1752,
+   "lon": 11.551,
+   "deg": 10,
+   "signal": true
+  },
+  {
+   "id": 104,
+   "lat": 48.174,
+   "lon": 11.5542,
+   "deg": 6,
+   "signal": true
+  },
+  {
+   "id": 105,
+   "lat": 48.1719,
+   "lon": 11.5531,
+   "deg": 6,
+   "signal": true
+  },
+  {
+   "id": 206,
+   "lat": 48.1683,
+   "lon": 11.5504,
+   "deg": 2,
+   "signal": false
+  },
+  {
+   "id": 207,
+   "lat": 48.1741,
+   "lon": 11.5433,
+   "deg": 2,
+   "signal": false
+  },
+  {
+   "id": 208,
+   "lat": 48.181,
+   "lon": 11.5489,
+   "deg": 2,
+   "signal": false
+  },
+  {
+   "id": 209,
+   "lat": 48.1797,
+   "lon": 11.551,
+   "deg": 2,
+   "signal": false
+  },
+  {
+   "id": 210,
+   "lat": 48.174,
+   "lon": 11.5587,
+   "deg": 2,
+   "signal": false
+  },
+  {
+   "id": 211,
+   "lat": 48.1674,
+   "lon": 11.5531,
+   "deg": 2,
+   "signal": false
+  }
+ ],
+ "links": [
+  {
+   "id": 0,
+   "from": 100,
+   "to": 101,
+   "oneway": false,
+   "length_m": 241.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "EXPO-S-EXPO-W",
+   "hw": "secondary"
+  },
+  {
+   "id": 1,
+   "from": 101,
+   "to": 100,
+   "oneway": false,
+   "length_m": 241.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "EXPO-S-EXPO-W",
+   "hw": "secondary"
+  },
+  {
+   "id": 2,
+   "from": 101,
+   "to": 102,
+   "oneway": false,
+   "length_m": 279.1,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "EXPO-W-RING-01",
+   "hw": "secondary"
+  },
+  {
+   "id": 3,
+   "from": 102,
+   "to": 101,
+   "oneway": false,
+   "length_m": 279.1,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "EXPO-W-RING-01",
+   "hw": "secondary"
+  },
+  {
+   "id": 4,
+   "from": 102,
+   "to": 103,
+   "oneway": false,
+   "length_m": 212.5,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "RING-01-EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 5,
+   "from": 103,
+   "to": 102,
+   "oneway": false,
+   "length_m": 212.5,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "RING-01-EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 6,
+   "from": 103,
+   "to": 104,
+   "oneway": false,
+   "length_m": 272.2,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "EXPO-N-EXPO-E",
+   "hw": "secondary"
+  },
+  {
+   "id": 7,
+   "from": 104,
+   "to": 103,
+   "oneway": false,
+   "length_m": 272.2,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "EXPO-N-EXPO-E",
+   "hw": "secondary"
+  },
+  {
+   "id": 8,
+   "from": 104,
+   "to": 105,
+   "oneway": false,
+   "length_m": 247.3,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "EXPO-E-RING-02",
+   "hw": "secondary"
+  },
+  {
+   "id": 9,
+   "from": 105,
+   "to": 104,
+   "oneway": false,
+   "length_m": 247.3,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "EXPO-E-RING-02",
+   "hw": "secondary"
+  },
+  {
+   "id": 10,
+   "from": 105,
+   "to": 100,
+   "oneway": false,
+   "length_m": 223.8,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "RING-02-EXPO-S",
+   "hw": "secondary"
+  },
+  {
+   "id": 11,
+   "from": 100,
+   "to": 105,
+   "oneway": false,
+   "length_m": 223.8,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "RING-02-EXPO-S",
+   "hw": "secondary"
+  },
+  {
+   "id": 12,
+   "from": 101,
+   "to": 103,
+   "oneway": false,
+   "length_m": 267.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "EXPO-W-EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 13,
+   "from": 103,
+   "to": 101,
+   "oneway": false,
+   "length_m": 267.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "EXPO-W-EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 14,
+   "from": 100,
+   "to": 103,
+   "oneway": false,
+   "length_m": 270.6,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "EXPO-S-EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 15,
+   "from": 103,
+   "to": 100,
+   "oneway": false,
+   "length_m": 270.6,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "EXPO-S-EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 16,
+   "from": 100,
+   "to": 206,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-S",
+   "hw": "secondary"
+  },
+  {
+   "id": 17,
+   "from": 206,
+   "to": 100,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-S",
+   "hw": "secondary"
+  },
+  {
+   "id": 18,
+   "from": 101,
+   "to": 207,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-W",
+   "hw": "secondary"
+  },
+  {
+   "id": 19,
+   "from": 207,
+   "to": 101,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-W",
+   "hw": "secondary"
+  },
+  {
+   "id": 20,
+   "from": 102,
+   "to": 208,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway RING-01",
+   "hw": "secondary"
+  },
+  {
+   "id": 21,
+   "from": 208,
+   "to": 102,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway RING-01",
+   "hw": "secondary"
+  },
+  {
+   "id": 22,
+   "from": 103,
+   "to": 209,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 23,
+   "from": 209,
+   "to": 103,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-N",
+   "hw": "secondary"
+  },
+  {
+   "id": 24,
+   "from": 104,
+   "to": 210,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-E",
+   "hw": "secondary"
+  },
+  {
+   "id": 25,
+   "from": 210,
+   "to": 104,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 1,
+   "speed_kph": 50,
+   "name": "Gateway EXPO-E",
+   "hw": "secondary"
+  },
+  {
+   "id": 26,
+   "from": 105,
+   "to": 211,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway RING-02",
+   "hw": "secondary"
+  },
+  {
+   "id": 27,
+   "from": 211,
+   "to": 105,
+   "oneway": false,
+   "length_m": 120.0,
+   "lanes": 2,
+   "speed_kph": 50,
+   "name": "Gateway RING-02",
+   "hw": "secondary"
+  }
+ ],
+ "stats": {
+  "nodes": 12,
+  "links": 28,
+  "signals": 6,
+  "junctions": 6,
+  "sample_cycle_s": 90,
+  "source": "MunichTech EXPO Autumn 2026 - Smart Cities sample feed (synthetic/anonymized)",
+  "source_short": "Offizielles Expo-Sample (synthetisch, anonymisiert)",
+  "default_vph": 2500,
+  "default_window": [
+   "07:00",
+   "09:00"
+  ],
+  "assumptions": [
+   "Topologie: Nachbar-Ring um den Bezirks-Centroid + 2 kuerzeste Sehnen durchs Expo-Viereck (Sample nennt keine Kanten)",
+   "Lanes je Richtung aus dem lane_count des jeweiligen Approach",
+   "Gateway-Stubs ausserhalb des bbox (wie OSM-Extrakte)",
+   "Turn-Split/OD-Prior wie im Netzwerk-Modell (Lanes-Gravity)"
+  ]
+ },
+ "licence": "Sample (c) MunichTech EXPO 2026 - simulation/prototype use",
+ "attribution": "MunichTech EXPO Smart Cities: Adaptive Traffic Flow challenge sample dataset (synthetic, anonymized)",
+ "links_meta": {
+  "challenge": "https://munichtechexpo.com/hackathons/challenges/smart-cities-traffic-flow-2026"
+ }
+}

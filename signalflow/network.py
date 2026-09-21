@@ -43,7 +43,7 @@ COORD_PROGRESSION = 0.95          # design speed as a fraction of free-flow
 CORRIDOR_BONUS = 6.0              # pressure bonus for the corridor (bus) axis under TSP
 MAX_CORRIDORS = 3                 # number of arterial corridors to coordinate
 
-DEFAULT_VPH = {"expo_riem": 3500, "innenstadt": 5000}
+DEFAULT_VPH = {"expo_riem": 3500, "innenstadt": 5000, "expo_hackatron": 2500}
 
 
 def _haversine(a_lat, a_lon, b_lat, b_lon) -> float:

@@ -189,6 +189,7 @@
     berufsverkehr: { dow: 'wd', from: '07:00', to: '18:00' },
     ferien:        { dow: 'wd', from: '09:00', to: '19:00' },
     freizeit:      { dow: 'sa', from: '09:00', to: '21:00' },
+    custom:        { dow: 'wd', from: '07:00', to: '09:00' },
   };
 
   function spanMinutes(fromS, toS) {
@@ -374,13 +375,14 @@
   function buildBody() {
     const mix = $('ctl-mix') ? $('ctl-mix').value : 'car';
     const tsp = $('ctl-tsp') ? $('ctl-tsp').value : 'off';
-    return {
+    const scenario = $('ctl-scenario') ? $('ctl-scenario').value : 'normal';
+    const body = {
       region: $('ctl-region').value,
       time_from: $('ctl-time-from') ? $('ctl-time-from').value : null,
       time_to: $('ctl-time-to') ? $('ctl-time-to').value : null,
       warmup_min: 5,
       demand_multiplier: Number($('ctl-load').value),
-      demand_scenario: $('ctl-scenario') ? $('ctl-scenario').value : 'normal',
+      demand_scenario: scenario,
       vehicle_mix: {
         car: { car: 1.0 },
         city: { car: 0.86, van: 0.06, truck: 0.06, bus: 0.02 },
@@ -390,6 +392,8 @@
       seed: Number($('ctl-seed').value),
       total_vph: Number($('ctl-vph').value),
     };
+    if (scenario === 'custom') body.demand_profile = 'flat';
+    return body;
   }
 
   async function runSimulation() {
@@ -1814,6 +1818,20 @@
     region.addEventListener('change', function () {
       const id = region.value;
       state.regionMeta = state.regions.find(function (r) { return r.id === id; }) || { id: id };
+      // Sample-kalibrierte Regionen bringen eigene Defaults mit (vph + Fenster)
+      const st = state.regionMeta && state.regionMeta.stats;
+      if (st && st.default_vph) {
+        const vph = $('ctl-vph');
+        if (vph) {
+          vph.value = st.default_vph;
+          if ($('val-vph')) $('val-vph').textContent = st.default_vph;
+          setRangeFill(vph);
+        }
+      }
+      if (st && st.default_window && st.default_window.length === 2) {
+        const zf = $('ctl-time-from'), zt = $('ctl-time-to');
+        if (zf && zt) { zf.value = st.default_window[0]; zt.value = st.default_window[1]; }
+      }
       renderStats();
       markDirty();
     });
@@ -1980,6 +1998,8 @@
       ['Gebiet', (res.name || res.region) + ' (' + res.region + ')'],
       ['Netz', fmt(fx.links, 0) + ' Links · ' + fmt(fx.junctions, 0) + ' signalisierte Knoten' +
         (netStats.n_entries != null ? ' · ' + fmt(netStats.n_entries, 0) + ' Zufahrten / ' + fmt(netStats.n_exits, 0) + ' Ausfahrten' : '')],
+      ['Datenbasis', ((state.regionMeta && state.regionMeta.stats && state.regionMeta.stats.source_short)
+        ? state.regionMeta.stats.source_short : 'OSM-Extrakt (OpenStreetMap)')],
       ['Szenario', selText('ctl-scenario')],
       ['Zeitraum', win + ' · Warm-up ' + (meta.warmup_min || 0) + ' min (nicht gewertet)'],
       ['Fahrzeugmix', selText('ctl-mix')],
