@@ -47,20 +47,24 @@ TIME_COLS = ("t_seconds", "timestamp", "time", "datetime", "date_time")
 APPROACH_COLS = ("approach", "zone", "location", "direction", "corridor", "device_id")
 MOVE_COLS = ("movement", "turn", "lane_use")
 COUNT_COLS = ("vehicles_count", "traffic_count", "count", "vehicles", "volume", "flow")
+# Substring fallback must never match these (e.g. "lane_count" contains "count",
+# "vehicle_count_15min" would be found by the exact candidates anyway).
+COUNT_SUBSTR_EXCLUDES = ("lane", "signal", "queue", "speed", "phase")
 
 
 # --------------------------------------------------------------------------- #
 # small helpers
 # --------------------------------------------------------------------------- #
 
-def _pick(fields: list[str], candidates: tuple[str, ...]) -> str | None:
+def _pick(fields: list[str], candidates: tuple[str, ...],
+          excludes: tuple[str, ...] = ()) -> str | None:
     low = {f.lower().strip(): f for f in fields}
     for c in candidates:
         if c in low:
             return low[c]
     for f in fields:                     # substring fallback
         for c in candidates:
-            if c in f.lower():
+            if c in f.lower() and not any(x in f.lower() for x in excludes):
                 return f
     return None
 
@@ -120,7 +124,7 @@ def adapt(source: str, out_path: str | None = None,
     t_col = _pick(fields, TIME_COLS)
     a_col = _pick(fields, APPROACH_COLS)
     m_col = _pick(fields, MOVE_COLS)
-    c_col = _pick(fields, COUNT_COLS)
+    c_col = _pick(fields, COUNT_COLS, COUNT_SUBSTR_EXCLUDES)
     if c_col is None:
         raise ValueError(f"no count column found in {fields}")
 
