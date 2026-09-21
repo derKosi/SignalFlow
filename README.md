@@ -25,6 +25,30 @@ is configured on the demo host.
 
 ---
 
+## 🆕 Update (Sep 21) — Hackatron CSV: official sample feed integrated
+
+Bonus built *after* the build window on a feature branch — the submitted demo
+above is unchanged. The organiser's official sample sensor CSV (synthetic,
+anonymised) now drives a dedicated region, **Hackatron Expo-District**:
+real sample coordinates, lane counts and signal cycle, with volumes calibrated
+from the sample's own rush-hour counts (2500 veh/h network demand ≈ 5376
+measured stop-line passages/h). Adaptive control here runs **max-pressure**
+(measured −38 % delay vs fixed-time over the 2 h morning-rush window; the
+sample's short links make spillback — not split-tuning — the winning lever).
+
+Try it live on the demo host **<https://complycoder.de>**:
+
+* **Main link (jury-ready):** <https://complycoder.de/network.html> — opens pre-configured (Sample scenario, 2500 veh/h, 07:00–09:00) and auto-simulates
+* Midday window (11–13 h): <https://complycoder.de/network.html?region=expo_hackatron&scenario=custom&vph=2000&from=11:00&to=13:00>
+* Evening peak (16–18 h): <https://complycoder.de/network.html?region=expo_hackatron&scenario=custom&vph=2500&from=16:00&to=18:00>
+
+Honesty note: the sample names no road links between its six intersections —
+the region's ring + chord topology is derived (nearest-neighbour ring around
+the district centroid) and declared in the region file's `stats.assumptions`.
+Rebuild it yourself: `python3 tools/build_expo_region.py data/sample_hackatron.csv`.
+
+---
+
 ## Headline result (default scenario: 30 min, rush-hour peak)
 
 Both controllers face the **identical** arrival stream (same seed), so the
