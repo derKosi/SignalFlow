@@ -54,6 +54,7 @@ class TestExpoHackatronRegion(unittest.TestCase):
         st = [r for r in list_regions() if r["id"] == "expo_hackatron"][0]["stats"]
         self.assertEqual(st["default_vph"], 2500)
         self.assertEqual(st["default_window"], ["07:00", "09:00"])
+        self.assertEqual(st["default_scenario"], "custom")
         self.assertEqual(st["sample_cycle_s"], 90)
         self.assertTrue(st.get("source_short"))
         self.assertTrue(st.get("assumptions"))

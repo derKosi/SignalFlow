@@ -368,6 +368,7 @@
       html += statPill('Zufahrten', fmt(d.n_entries, 0));
       html += statPill('Ausfahrten', fmt(d.n_exits, 0));
     }
+    if (s.source_short) html += statPill('Datenbasis', s.source_short, true);
     box.innerHTML = html;
   }
 
@@ -1803,6 +1804,35 @@
     [load, seed, vph].forEach(function (el) {
       el.addEventListener('input', function () { syncVals(); markDirty(); });
     });
+    // Regionswechsel: Sample-kalibrierte Regionen bringen eigene Defaults mit
+    // (vph + Zeitfenster). Bei URL-Parametern (deep link) gewinnt die URL —
+    // siehe readUrlParams() in init().
+    window.SFApplyRegionDefaults = function (fromUrl) {
+      const meta = state.regionMeta || {};
+      const st = meta.stats || {};
+      if (st.default_scenario && !fromUrl) {
+        const sc = $('ctl-scenario');
+        if (sc && [...sc.options].some(function (o) { return o.value === st.default_scenario; })) {
+          sc.value = st.default_scenario;
+        }
+      }
+      if (!fromUrl && st.default_vph) {
+        const vphEl = $('ctl-vph');
+        if (vphEl) {
+          vphEl.value = st.default_vph;
+          if ($('val-vph')) $('val-vph').textContent = st.default_vph;
+          setRangeFill(vphEl);
+        }
+      }
+      if (!fromUrl && st.default_window && st.default_window.length === 2) {
+        const zf = $('ctl-time-from'), zt = $('ctl-time-to');
+        if (zf && zt) {
+          zf.value = st.default_window[0];
+          zt.value = st.default_window[1];
+          updateTimeHint();
+        }
+      }
+    };
     // Szenario setzt das Zeitfenster vor; Fenster-Änderungen markieren dirty
     prof.addEventListener('change', function () { syncVals(); applyScenarioPreset(); markDirty(); });
     ['ctl-dow', 'ctl-time-from', 'ctl-time-to'].forEach(function (id) {
@@ -1818,20 +1848,7 @@
     region.addEventListener('change', function () {
       const id = region.value;
       state.regionMeta = state.regions.find(function (r) { return r.id === id; }) || { id: id };
-      // Sample-kalibrierte Regionen bringen eigene Defaults mit (vph + Fenster)
-      const st = state.regionMeta && state.regionMeta.stats;
-      if (st && st.default_vph) {
-        const vph = $('ctl-vph');
-        if (vph) {
-          vph.value = st.default_vph;
-          if ($('val-vph')) $('val-vph').textContent = st.default_vph;
-          setRangeFill(vph);
-        }
-      }
-      if (st && st.default_window && st.default_window.length === 2) {
-        const zf = $('ctl-time-from'), zt = $('ctl-time-to');
-        if (zf && zt) { zf.value = st.default_window[0]; zt.value = st.default_window[1]; }
-      }
+      window.SFApplyRegionDefaults(false);
       renderStats();
       markDirty();
     });
@@ -2157,6 +2174,39 @@
     }
   }
 
+  // URL-Parameter (Deep Link): ?region=&vph=&from=&to=&scenario=&mix=&tsp=
+  // Gewinnen gegen Regions-Defaults; unbekannte Werte werden still ignoriert.
+  function readUrlParams() {
+    const q = new URLSearchParams(location.search);
+    const out = {};
+    const map = [
+      ['region', 'ctl-region', null],
+      ['scenario', 'ctl-scenario', ['normal', 'berufsverkehr', 'ferien', 'freizeit', 'custom']],
+      ['mix', 'ctl-mix', null],
+      ['tsp', 'ctl-tsp', ['off', 'on']],
+      ['from', 'ctl-time-from', null],
+      ['to', 'ctl-time-to', null],
+    ];
+    let has = false;
+    map.forEach(function (m) {
+      const raw = q.get(m[0]);
+      if (raw == null || raw === '') return;
+      const el = document.getElementById(m[1]);
+      if (!el) return;
+      if (m[2] && m[2].indexOf(raw) < 0) return;      // ungültiger Wert -> ignorieren
+      el.value = raw;
+      out[m[0]] = raw;
+      has = true;
+    });
+    const vph = Number(q.get('vph'));
+    if (Number.isFinite(vph) && vph >= 2000 && vph <= 20000) {
+      const el = $('ctl-vph');
+      if (el) { el.value = vph; out.vph = vph; has = true; }
+    }
+    if (out.from || out.to) updateTimeHint();
+    return has ? out : null;
+  }
+
   async function init() {
     bindTransport();
     bindControls();
@@ -2209,7 +2259,17 @@
       return;
     }
     state.regions = regions;
-    populateRegions(regions);
+    // Release-Default: sample-kalibrierte Region vorwählen (expo_hackatron),
+    // falls vorhanden — ihre Defaults (Szenario, vph, Zeitfenster) setzen die
+    // Controls. Danach gewinnt ein eventueller Deep Link (?region=…&vph=…).
+    const preferred = regions.find(function (r) {
+      return r.stats && r.stats.default_vph;
+    });
+    populateRegions(regions, preferred ? preferred.id : undefined);
+    if (preferred) window.SFApplyRegionDefaults(false);
+    readUrlParams();
+    const sel = $('ctl-region');
+    if (sel) state.regionMeta = regions.find(function (r) { return r.id === sel.value; }) || state.regionMeta;
     renderStats();
     await runSimulation();
   }

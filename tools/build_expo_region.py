@@ -185,6 +185,7 @@ def build(csv_path: Path, windows: list[str]) -> tuple[dict, dict]:
             "source_short": "Offizielles Expo-Sample (synthetisch, anonymisiert)",
             "default_vph": 2500,
             "default_window": ["07:00", "09:00"],
+            "default_scenario": "custom",
             "assumptions": [
                 "Topologie: Nachbar-Ring um den Bezirks-Centroid + 2 kuerzeste "
                 "Sehnen durchs Expo-Viereck (Sample nennt keine Kanten)",

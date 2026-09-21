@@ -416,6 +416,7 @@
    "07:00",
    "09:00"
   ],
+  "default_scenario": "custom",
   "assumptions": [
    "Topologie: Nachbar-Ring um den Bezirks-Centroid + 2 kuerzeste Sehnen durchs Expo-Viereck (Sample nennt keine Kanten)",
    "Lanes je Richtung aus dem lane_count des jeweiligen Approach",
