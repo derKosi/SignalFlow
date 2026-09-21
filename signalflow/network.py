@@ -44,6 +44,10 @@ CORRIDOR_BONUS = 6.0              # pressure bonus for the corridor (bus) axis u
 MAX_CORRIDORS = 3                 # number of arterial corridors to coordinate
 
 DEFAULT_VPH = {"expo_riem": 3500, "innenstadt": 5000, "expo_hackatron": 2500}
+# Adaptive variant per region: "split" (split-tuning) is the default on the OSM
+# arterials; on the short-link expo ring spillback dominates and max-pressure
+# wins clearly (measured: 15s vs 77s delay over the 2h sample window).
+DEFAULT_ADAPTIVE = {"expo_hackatron": "pressure"}
 
 
 def _haversine(a_lat, a_lon, b_lat, b_lon) -> float:
@@ -1042,11 +1046,14 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
     fixed = _simulate(c, demand, FixedJunction(c), base, frame_dt, corr_links, counts=counts)
     tuned = _simulate(c, demand, FixedTunedJunction(c, demand.get("link_flow")),
                       base, frame_dt, corr_links)
-    kind = cfg.get("adaptive_kind", "split")
+    kind = cfg.get("adaptive_kind") or DEFAULT_ADAPTIVE.get(region_id, "split")
     # Webster cycle *lengthening* under load: wins on saturated arterials
     # (Riem, Köln) but hurts short-link grids where spillback dominates
     # (Hamburg, Berlin-Mitte) — measured, see tools/od_experiment.py — so it
-    # is opt-in via config rather than the default policy.
+    # is opt-in via config rather than the default policy. Same for the
+    # adaptive variant itself: split-tuning wins on the OSM arterials, but on
+    # the short-link expo ring (sample region) queue spillback dominates and
+    # max-pressure is the right tool — see tests/test_expo_region.py.
     webster = bool(cfg.get("webster_cycle", False))
     if kind == "pressure" or tsp:
         adaptive = _simulate(c, demand, AdaptiveJunction(
