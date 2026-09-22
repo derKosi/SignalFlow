@@ -203,7 +203,7 @@ select{
 }
 
 /* -------------------------------- KPIs ------------------------------ */
-.kpi-grid{ display:grid; grid-template-columns: repeat(5, 1fr); gap:14px; }
+.kpi-grid{ display:grid; grid-template-columns: repeat(3, 1fr); gap:14px; }
 .kpi{
   background: linear-gradient(180deg, var(--panel), var(--bg-2));
   border:1px solid var(--line); border-radius: var(--radius);
@@ -367,6 +367,9 @@ body[data-theme="light"] .zoom-row input[type=time]{ color-scheme:light; }
 .canvas-wrap{ display:grid; grid-template-columns:1fr; gap:14px; }
 .canvas-wrap[data-n="2"], .canvas-wrap[data-n="3"], .canvas-wrap[data-n="4"]{
   grid-template-columns:1fr 1fr;
+}
+.canvas-wrap[data-n="5"], .canvas-wrap[data-n="6"]{
+  grid-template-columns:1fr 1fr 1fr;
 }
 .canvas-cell{
   position:relative; border:1px solid var(--line-soft); border-radius:10px;
