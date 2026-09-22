@@ -317,6 +317,8 @@
       adaptive: (res.adaptive && res.adaptive.frames) || [],
       coordinated: (res.coordinated && res.coordinated.frames) || [],
       tuned: (res.tuned && res.tuned.frames) || [],
+      jev_adaptive: (res.jev_adaptive && res.jev_adaptive.frames) || [],
+      jev_tuned: (res.jev_tuned && res.jev_tuned.frames) || [],
     };
     state.plans = {
       fixed: (res.fixed && res.fixed.plan) || null,
