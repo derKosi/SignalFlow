@@ -47,7 +47,10 @@ CACHE_DIR = ROOT / "data" / "cache"        # disk cache: instant repeated/demo r
 
 def _cache_key(path: str, payload: dict) -> str:
     import hashlib
-    h = hashlib.sha1((path + "|" + json.dumps(payload, sort_keys=True)).encode()).hexdigest()
+    # Salt mit Version + Jev-Flag: alte Cache-Einträge werden nach Deployments
+    # nie wieder ausgeliefert (Ergebnis-Schema hängt vom Code-Stand ab).
+    salt = f"{__version__}|jev={os.environ.get('SIGNALFLOW_JEV_POLICIES', '')}"
+    h = hashlib.sha1((path + "|" + json.dumps(payload, sort_keys=True) + "|" + salt).encode()).hexdigest()
     return h[:24]
 
 
