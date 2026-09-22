@@ -36,6 +36,7 @@ from __future__ import annotations
 import csv
 import io
 import math
+import os
 import random
 import urllib.request
 from dataclasses import dataclass, field, asdict, fields
@@ -1267,6 +1268,15 @@ def run_scenario(cfg_dict: dict | None = None, frame_target: int = 400) -> dict:
         runs = {k: simulate(cfg, arrivals, c, frame_target, warmup)
                 for k, c in controllers.items()}
         ref_label, alt_label = "Fixed-Time", "Adaptiv"
+
+        # Jev-Spike (feature branch): zwei weitere Policies dazu, opt-in via
+        # SIGNALFLOW_JEV_POLICIES=1 — offline & in Tests bleibt alles beim
+        # alten Verhalten (keine API-Calls, deterministisch).
+        if os.environ.get("SIGNALFLOW_JEV_POLICIES", "").lower() in ("1", "true", "yes"):
+            from .jev_controllers import build_jev_controllers
+            for k, c in build_jev_controllers(cfg).items():
+                controllers[k] = c
+                runs[k] = simulate(cfg, arrivals, c, frame_target, warmup)
     else:
         # roundabout: compare a signalised reference (cross4 plan on the same arms)
         # against the unsignalised roundabout on identical demand
@@ -1332,12 +1342,22 @@ def run_scenario(cfg_dict: dict | None = None, frame_target: int = 400) -> dict:
         out["coordinated"] = {"frames": runs["coordinated"]["frames"],
                               "plan": plan_of("coordinated")}
         out["tuned"] = {"frames": runs["tuned"]["frames"], "plan": plan_of("tuned")}
-        out["junction"]["policies"] = [
+        policies = [
             {"key": "fixed", "label": "Fixed"},
             {"key": "adaptive", "label": "Adaptiv"},
             {"key": "coordinated", "label": "Koord."},
             {"key": "tuned", "label": "Tuned*"},
         ]
+        for key, label in (("jev_adaptive", "Jev Adaptiv"),
+                           ("jev_tuned", "Jev Tuned*")):
+            if key in runs:
+                out["summary"][key] = runs[key]["summary"]
+                out[key] = {"frames": runs[key]["frames"],
+                            "plan": plan_of(key)}
+                if key == "jev_adaptive":
+                    out[key]["decisions"] = runs[key]["decisions"][:200]
+                policies.append({"key": key, "label": label})
+        out["junction"]["policies"] = policies
     return out
 
 

@@ -112,6 +112,10 @@
       info: 'Grüne Welle: Korridor-Takt 90 s, Grünanteile zugunsten der Hauptachse. An der isolierten Kreuzung ≈ Fixed — der Gewinn entsteht erst mit Nachbarn (Netzwerk-Ansicht)' },
     { key: 'tuned', label: 'Tuned', color: '#a78bfa',
       info: 'Webster-Pläne aus Stopp-Linien-Zählungen (Detektor-Daten), je Tageszeit — keine live Anpassung während der Fahrt' },
+    { key: 'jev_adaptive', label: 'Jev Adaptiv', color: '#f97316',
+      info: 'Max-Pressure-Steuerung, deren Phasenwechsel von einem typisierten Jev-Decision-Modell (Simple Jev, Featherless) bestätigt werden — kalibrierte Confidence statt reiner Heuristik' },
+    { key: 'jev_tuned', label: 'Jev Tuned', color: '#ec4899',
+      info: 'Tuned-Plan aus echten Hackatron-Detektordaten (CSV): Jev-Scores kalibrieren die Kopfreserve je Tageszeit-Bucket aus Wetter, Rush-Hour-Anteil und Geschwindigkeitsdefizit' },
   ];
   const polByKey = (k) => POLICY_META.find((p) => p.key === k) || POLICY_META[0];
 
