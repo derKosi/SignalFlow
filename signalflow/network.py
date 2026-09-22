@@ -22,6 +22,7 @@ from __future__ import annotations
 import heapq
 import json
 import math
+import os
 from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -1065,6 +1066,20 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
     coordinated = _simulate(c, demand, CoordinatedJunction(c, demand["corridors"]),
                             base, frame_dt, corr_links)
 
+    # Jev-Spike (feature branch): district-weite Jev-Policy, opt-in via
+    # SIGNALFLOW_JEV_POLICIES=1 — ein gebuendelter API-Call pro Schritt.
+    jev_run = None
+    jev_meta: dict = {}
+    if os.environ.get("SIGNALFLOW_JEV_POLICIES", "").lower() in ("1", "true", "yes"):
+        from .jev_district import JevDistrictJunction
+        ctrl = JevDistrictJunction(c, corridors=demand["corridors"],
+                                   transit_priority=tsp)
+        jev_run = _simulate(c, demand, ctrl, base, frame_dt, corr_links)
+        jev_meta = {"jev_calls": ctrl.jev_calls,
+                    "jev_confirms": ctrl.jev_confirms,
+                    "jev_holds": ctrl.jev_holds,
+                    "jev_fallbacks": ctrl.jev_fallbacks}
+
     # Count-based OD estimation: treat the *fixed* run as the city's detector
     # logs (stop-line counts), estimate the OD matrix from them and tune a plan
     # on the estimate — no oracle demand knowledge involved.
@@ -1137,12 +1152,16 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
                      "time_from": time_from, "time_to": time_to,
                      "warmup_min": warmup_min, "clock": from_sec is not None},
         "summary": {"fixed": f, "fixed_tuned": t_, "adaptive": a, "coordinated": k,
-                    **({"fixed_tuned_est": tuned_est[0]} if tuned_est else {})},
+                    **({**{"jev_adaptive": jev_run[0]},
+                       **({"fixed_tuned_est": tuned_est[0]} if tuned_est else {})}
+                       if jev_run else
+                       ({"fixed_tuned_est": tuned_est[0]} if tuned_est else {}))},
         "improvement": improvement,
         "frames": {"fixed": fixed[1], "adaptive": adaptive[1], "coordinated": coordinated[1],
                    # the KPI row "Tuned" is the count-based estimate — animate that
                    # same run (the oracle-tuned frames are deliberately not shown)
-                   **({"tuned": tuned_est[1]} if tuned_est is not None else {})},
+                   **({"tuned": tuned_est[1]} if tuned_est is not None else {}),
+                   **({"jev_adaptive": jev_run[1]} if jev_run is not None else {})},
         "config": {**base, "total_vph": total_vph, "frame_dt": frame_dt},
         "meta": {"steps": duration_min * 60, "frame_dt": frame_dt,
                  "clock": from_sec is not None,
@@ -1151,7 +1170,8 @@ def run_region(region_id: str, cfg: dict | None = None) -> dict:
                  "time_from": time_from, "time_to": time_to,
                  "generated": "SignalFlow network v0.4 (OSM link-queue + green wave "
                               "+ count-based OD)",
-                 **({"od_estimation": od_meta} if od_meta else {})},
+                 **({"od_estimation": od_meta} if od_meta else {}),
+                 **({"jev": jev_meta} if jev_run is not None else {})},
     }
 
 

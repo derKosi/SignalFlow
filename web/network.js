@@ -62,6 +62,8 @@
       info: 'Grüne Welle: gemeinsamer Korridor-Takt + Versatz-Offsets; das übrige Netz bleibt adaptiv' },
     { key: 'tuned', summaryKey: 'fixed_tuned_est', label: 'Tuned', color: '#a78bfa',
       info: 'Fester Plan, getunt aus Detektor-Zählungen (OD-Schätzung) statt echter Nachfrage — fairere Baseline ohne Oracle-Wissen. Je nach Netz schlägt sie Adaptive (kurzmaschige Grids wie Berlin/Hamburg) oder verliert (z. B. Riem/Köln) — siehe docs/results.md. Animiert wird die Zähl-basierte Variante.' },
+    { key: 'jev_adaptive', summaryKey: 'jev_adaptive', label: 'Jev Adaptiv', color: '#f97316',
+      info: 'Max-Pressure je Knoten, dessen Phasenwechsel von einem typisierten Jev-Decision-Modell (Simple Jev, Featherless) bestätigt werden — ein gebündelter API-Call pro Schritt für den ganzen Bezirk, kalibrierte noul-Werte je Knoten' },
   ];
 
   const KPI_META = [
